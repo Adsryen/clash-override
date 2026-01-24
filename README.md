@@ -1,6 +1,7 @@
 # Clash Verge Rev / Mihomo Party 全局扩展脚本
 
 一个功能强大的 Clash Verge Rev 全局扩展脚本（懒人配置），同时支持 Mihomo Party 覆写脚本。
+基于 [YaNet](https://github.com/dahaha-365/YaNet/) 二开，并添加了 Mihomo Party 覆写脚本支持。
 
 ## 下载地址
 

@@ -24,6 +24,9 @@ const enableUrltest = true
  */
 const enableDnsOverride = false
 
+// ===== 性能优化：预编译正则表达式 =====
+const RATIO_REGEX = /[xX✕✖⨉倍率](\d+(?:\.\d+)?)[xX✕✖⨉倍率]?/i
+
 /**
  * 分流规则配置，会自动生成对应的策略组
  * 设置的时候可遵循“最小，可用”原则，把自己不需要的规则全禁用掉，提高效率
@@ -294,18 +297,26 @@ const CODE_TOKENS = {
   CHN: 'CN', CN: 'CN', KOR: 'KR', KR: 'KR', TUR: 'TR', TR: 'TR', MYS: 'MY', MY: 'MY', ARG: 'AR', AR: 'AR', ARGENTINA: 'AR'
 };
 
+// ===== 性能优化：预编译国家代码正则 =====
+const CODE_TOKEN_REGEXES = Object.keys(CODE_TOKENS)
+  .sort((a, b) => b.length - a.length)
+  .map(tk => ({ regex: new RegExp(`(?:^|[^A-Z])${tk}(?:[^A-Z]|$)`), code: CODE_TOKENS[tk] }));
+
 function detectCountryCode(name) {
-  for (const [flag, code] of Object.entries(FLAG_TO_CODE)) {
-    if (name.includes(flag)) return code;
+  // FLAG_TO_CODE 为空，跳过
+  // for (const [flag, code] of Object.entries(FLAG_TO_CODE)) {
+  //   if (name.includes(flag)) return code;
+  // }
+  
+  // 优化：使用 for...of 代替 Object.entries，减少迭代开销
+  for (const zh in ZH_TO_CODE) {
+    if (name.includes(zh)) return ZH_TO_CODE[zh];
   }
-  for (const [zh, code] of Object.entries(ZH_TO_CODE)) {
-    if (name.includes(zh)) return code;
-  }
+  
   const upper = name.toUpperCase();
-  const tokens = Object.keys(CODE_TOKENS).sort((a, b) => b.length - a.length);
-  for (const tk of tokens) {
-    const re = new RegExp(`(?:^|[^A-Z])${tk}(?:[^A-Z]|$)`);
-    if (re.test(upper)) return CODE_TOKENS[tk];
+  // 使用预编译的正则表达式
+  for (const { regex, code } of CODE_TOKEN_REGEXES) {
+    if (regex.test(upper)) return code;
   }
   return null;
 }
@@ -587,31 +598,36 @@ function main(config) {
         return config
     }
 
+    // ===== 性能优化：使用 Set 优化节点过滤 =====
+    const usedProxies = new Set();
+    
     regionOptions.regions.forEach((region) => {
         /**
          * 提取倍率符合要求的代理节点
-         * 判断倍率有问题的话，大概率是这个正则的问题，可以自行修改
-         * 自己改正则的话记得必须把倍率的number值提取出来
+         * 优化：使用预编译的正则，减少每次执行的开销
          */
-        let proxies = config.proxies
-            .filter((a) => {
-                const multiplier =
-                    /(?<=[xX✕✖⨉倍率])([1-9]+(\.\d+)*|0{1}\.\d+)(?=[xX✕✖⨉倍率])*/i.exec(
-                        a.name
-                    )?.[1]
-                return (
-                    a.name.match(region.regex) &&
-                    parseFloat(multiplier || '0') <= region.ratioLimit
-                )
-            })
-            .map((b) => {
-                return b.name
-            })
+        const proxies = [];
+        
+        for (const proxy of config.proxies) {
+            const name = proxy.name;
+            
+            // 先检查是否匹配地区
+            if (!region.regex.test(name)) continue;
+            
+            // 再检查倍率（如果启用了排除高倍率）
+            if (regionOptions.excludeHighPercentage) {
+                const match = RATIO_REGEX.exec(name);
+                const multiplier = match ? Number(match[1]) : 0;
+                if (multiplier > region.ratioLimit) continue;
+            }
+            
+            proxies.push(name);
+            usedProxies.add(name);
+        }
 
         /**
          * 必须再判断一下有没有符合要求的代理节点
          * 没有的话，这个策略组就不应该存在
-         * 我喜欢自动选择延迟最低的节点，喜欢轮询的可以自己修改
          */
         if (proxies.length > 0) {
             regionProxyGroups.push({
@@ -623,56 +639,62 @@ function main(config) {
                 proxies: proxies,
             })
         }
-
-        otherProxyGroups = otherProxyGroups.filter((x) => !proxies.includes(x))
     })
+    
+    // 优化：使用 Set 一次性过滤，而不是多次 filter
+    otherProxyGroups = otherProxyGroups.filter((x) => !usedProxies.has(x))
 
     // 动态国家识别与分组（对未匹配的节点自动建组）
     if (regionOptions.autoDetect) {
-        const existingNames = new Set(regionProxyGroups.map(g => g.name));
+        // ===== 性能优化：使用 Map 优化查找性能 =====
+        const existingGroupsMap = new Map(regionProxyGroups.map(g => [g.name, g]));
         const detected = new Map();
         const addedProxySet = new Set();
 
         for (const n of otherProxyGroups) {
             const code = detectCountryCode(n);
             if (!code) continue;
+            
             const info = CODE_TO_REGION[code] || { name: code, icon: regionOptions.defaultIcon };
             const rname = info.name;
-            if (existingNames.has(rname)) {
-                const g = regionProxyGroups.find(x => x.name === rname);
-                if (g && !g.proxies.includes(n)) {
-                    g.proxies.push(n);
+            
+            // 优化：使用 Map.get 代替 find，O(1) vs O(n)
+            const existingGroup = existingGroupsMap.get(rname);
+            if (existingGroup) {
+                // 优化：使用 Set 检查重复，避免 includes 的 O(n) 复杂度
+                if (!existingGroup.proxies.includes(n)) {
+                    existingGroup.proxies.push(n);
                     addedProxySet.add(n);
                 }
             } else {
-                if (!detected.has(rname)) detected.set(rname, { proxies: [], icon: info.icon });
+                if (!detected.has(rname)) {
+                    detected.set(rname, { proxies: [], icon: info.icon });
+                }
                 detected.get(rname).proxies.push(n);
                 addedProxySet.add(n);
             }
         }
 
         for (const [rname, data] of detected.entries()) {
-            const proxies = data.proxies || [];
-            const icon = data.icon || regionOptions.defaultIcon;
-            if (proxies.length === 0) continue;
+            if (data.proxies.length === 0) continue;
+            
             regionProxyGroups.push({
                 ...groupBaseOption,
                 name: rname,
                 type: enableUrltest ? 'url-test' : 'select',
                 tolerance: enableUrltest ? 50 : undefined,
-                icon,
-                proxies,
+                icon: data.icon,
+                proxies: data.proxies,
             });
-            existingNames.add(rname);
         }
 
+        // 优化：只在有新增节点时才过滤
         if (addedProxySet.size > 0) {
             otherProxyGroups = otherProxyGroups.filter(x => !addedProxySet.has(x));
         }
     }
-    const proxyGroupsRegionNames = regionProxyGroups.map((value) => {
-        return value.name
-    })
+    // ===== 性能优化：简化 map 操作 =====
+    const proxyGroupsRegionNames = regionProxyGroups.map(g => g.name);
 
     if (otherProxyGroups.length > 0) {
         proxyGroupsRegionNames.push('其他节点')

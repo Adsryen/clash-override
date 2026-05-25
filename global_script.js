@@ -15,7 +15,7 @@ const enable = true
  * true = 使用urltest自动选择最低延迟节点
  * false = 使用select手动选择节点
  */
-const enableUrltest = true
+const enableUrltest = false
 
 /**
  * DNS覆写总开关
@@ -56,6 +56,8 @@ const ruleOptions = {
     whatsapp: false, // Whatsapp
     games: true, // 游戏策略组
     japan: true, // 日本网站策略组
+    hongkong: true, // 香港网站策略组
+    unitedstates: true, // 美国网站策略组
     tracker: true, // 网络分析和跟踪服务
     ads: true, // 常见的网络广告
 }
@@ -373,10 +375,10 @@ const customRules = {
     // 直连规则 - 不走代理的网站和应用
     direct: {
         target: 'DIRECT',
-        domainSuffix: ['warframe.com', 'prlrr.com', 'g5air.com', 'qslk.net', 'darensoft.com'],
+        domainSuffix: ['warframe.com', 'prlrr.com', 'g5air.com', 'qslk.net', 'darensoft.com','gzankun.com'],
         domainKeyword: ['audiences', 'rlzy' , 'rsxt', 'g5air'],
-        domain: [],
-        processName: ['SunloginClient', 'SunloginClient.exe', 'AnyDesk', 'AnyDesk.exe'],
+        domain: ['h1.gzankun.com'],
+        processName: ['SunloginClient', 'SunloginClient.exe', 'AnyDesk', 'AnyDesk.exe', 'BaoMiHua.exe'],
         ruleSets: [] // 规则集，格式：['规则集名称']
     },
 
@@ -408,14 +410,23 @@ const customRules = {
         ruleSets: [] // 注意：日本网站的 RULE-SET 在 ruleOptions.japan 中处理
     },
 
-    // 示例：美国网站规则（可以根据需要启用）
-    // usSites: {
-    //     target: 'US美国',
-    //     domainSuffix: ['hulu.com', 'netflix.com'],
-    //     domainKeyword: ['disney'],
-    //     domain: [],
-    //     ruleSets: []
-    // },
+    // 香港网站规则 - 专门走香港节点的网站
+    hkSites: {
+        target: '香港网站',
+        domainSuffix: ['fc2ppvdb.com'],
+        domainKeyword: [],
+        domain: [],
+        ruleSets: []
+    },
+
+    // 美国网站规则 - 专门走美国节点的网站
+    usSites: {
+        target: '美国网站',
+        domainSuffix: [],
+        domainKeyword: [],
+        domain: [],
+        ruleSets: []
+    },
 
     // 示例：游戏相关规则（可以根据需要启用）
     // gamingSites: {
@@ -1012,6 +1023,13 @@ function main(config) {
         })
     }
 
+    const createRegionPreferredProxies = (preferredGroupName) => {
+        const otherRegionNames = proxyGroupsRegionNames.filter(name => name !== preferredGroupName)
+        return proxyGroupsRegionNames.includes(preferredGroupName)
+            ? [preferredGroupName, '默认节点', ...otherRegionNames, '直连']
+            : ['默认节点', ...proxyGroupsRegionNames, '直连']
+    }
+
     if (ruleOptions.japan) {
         rules.push(
             'RULE-SET,category-bank-jp,日本网站',
@@ -1026,11 +1044,7 @@ function main(config) {
         })
 
         // 找到日本节点组，优先放在第一位
-        const jpGroupName = 'JP日本'
-        const otherRegionNames = proxyGroupsRegionNames.filter(name => name !== jpGroupName)
-        const jpProxies = proxyGroupsRegionNames.includes(jpGroupName)
-            ? [jpGroupName, '默认节点', ...otherRegionNames, '直连']
-            : ['默认节点', ...proxyGroupsRegionNames, '直连']
+        const jpProxies = createRegionPreferredProxies('JP日本')
 
         config['proxy-groups'].push({
             ...groupBaseOption,
@@ -1039,6 +1053,38 @@ function main(config) {
             proxies: jpProxies,
             url: 'https://r.r10s.jp/com/img/home/logo/touch.png',
             icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/JP.png',
+        })
+    }
+
+    if (ruleOptions.hongkong) {
+        rules.push('GEOIP,hk,香港网站,no-resolve')
+
+        // 找到香港节点组，优先放在第一位
+        const hkProxies = createRegionPreferredProxies('HK香港')
+
+        config['proxy-groups'].push({
+            ...groupBaseOption,
+            name: '香港网站',
+            type: 'select',
+            proxies: hkProxies,
+            url: 'http://www.gstatic.com/generate_204',
+            icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/HK.png',
+        })
+    }
+
+    if (ruleOptions.unitedstates) {
+        rules.push('GEOIP,us,美国网站,no-resolve')
+
+        // 找到美国节点组，优先放在第一位
+        const usProxies = createRegionPreferredProxies('US美国')
+
+        config['proxy-groups'].push({
+            ...groupBaseOption,
+            name: '美国网站',
+            type: 'select',
+            proxies: usProxies,
+            url: 'http://www.gstatic.com/generate_204',
+            icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/US.png',
         })
     }
 

@@ -722,11 +722,13 @@ function main(config) {
     ]
 
     config.proxies = config?.proxies || []
-    config.proxies.push({
-        name: '直连',
-        type: 'direct',
-        udp: true,
-    })
+    if (!config.proxies.some(proxy => proxy.name === '直连')) {
+        config.proxies.push({
+            name: '直连',
+            type: 'direct',
+            udp: true,
+        })
+    }
 
     if (ruleOptions.openai) {
         rules.push(

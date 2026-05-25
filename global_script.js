@@ -1059,7 +1059,7 @@ function main(config) {
     }
 
     if (ruleOptions.hongkong) {
-        rules.push('GEOIP,hk,香港网站,no-resolve')
+        rules.push('GEOIP,HK,香港网站,no-resolve')
 
         // 找到香港节点组，优先放在第一位
         const hkProxies = createRegionPreferredProxies('HK香港')
@@ -1075,7 +1075,7 @@ function main(config) {
     }
 
     if (ruleOptions.unitedstates) {
-        rules.push('GEOIP,us,美国网站,no-resolve')
+        rules.push('GEOIP,US,美国网站,no-resolve')
 
         // 找到美国节点组，优先放在第一位
         const usProxies = createRegionPreferredProxies('US美国')

@@ -114,6 +114,7 @@ const ruleOptions = {
     telegram: false,    // Telegram（按需启用）
     games: true,        // 游戏
     ads: true,          // 广告过滤
+    russia: true,       // 俄罗斯网站（默认直连）
     // ... 更多选项
 }
 ```

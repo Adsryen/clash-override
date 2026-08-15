@@ -77,6 +77,8 @@ jobs:
 
       - name: 配置 GitHub Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: 配置 Node.js
         uses: actions/setup-node@v4

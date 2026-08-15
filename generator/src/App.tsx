@@ -4,6 +4,7 @@ import {
   type GeneratorConfig,
   type RuleOptionKey,
 } from './domain/config'
+import { parseConfigFile, serializeConfigFile } from './domain/config-file'
 import { parseGeneratedScript, renderScript } from './domain/script'
 import {
   deletePreset,
@@ -86,6 +87,15 @@ function cloneDefaultConfig(): GeneratorConfig {
   }
 }
 
+function downloadTextFile(source: string, filename: string, contentType: string) {
+  const url = URL.createObjectURL(new Blob([source], { type: contentType }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 function App() {
   const [workspace, setWorkspace] = useState<GeneratorWorkspace>(() => loadWorkspace())
   const [presetName, setPresetName] = useState('')
@@ -119,6 +129,26 @@ function App() {
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : '无法导入脚本')
     }
+  }
+
+  const handleConfigImport = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    try {
+      updateDraft(parseConfigFile(await file.text()))
+      setNotice(`已导入配置 ${file.name}`)
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : '无法导入配置')
+    }
+  }
+
+  const handleReset = () => {
+    if (!window.confirm('确定恢复默认配置吗？当前配置将被覆盖。')) return
+
+    updateDraft(cloneDefaultConfig())
+    setNotice('已恢复默认配置')
   }
 
   const handleSavePreset = () => {
@@ -162,13 +192,17 @@ function App() {
   }
 
   const handleDownload = () => {
-    const url = URL.createObjectURL(new Blob([script], { type: 'text/javascript' }))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'global_script.js'
-    link.click()
-    URL.revokeObjectURL(url)
+    downloadTextFile(script, 'global_script.js', 'text/javascript')
     setNotice('脚本已下载')
+  }
+
+  const handleConfigExport = () => {
+    downloadTextFile(
+      serializeConfigFile(workspace.draft),
+      'clash-override-config.json',
+      'application/json',
+    )
+    setNotice('配置已导出')
   }
 
   return (
@@ -196,8 +230,21 @@ function App() {
           </div>
         </div>
         <div className="topbar-actions">
-          <button className="button secondary" type="button" onClick={() => updateDraft(cloneDefaultConfig())}>
-            新建配置
+          <button className="button secondary" type="button" onClick={handleReset}>
+            恢复默认
+          </button>
+          <label className="button secondary file-button" htmlFor="config-import">
+            导入配置
+            <input
+              id="config-import"
+              aria-label="导入配置"
+              type="file"
+              accept=".json,application/json"
+              onChange={handleConfigImport}
+            />
+          </label>
+          <button className="button secondary" type="button" onClick={handleConfigExport}>
+            导出配置
           </button>
           <label className="button secondary file-button" htmlFor="script-import">
             导入脚本

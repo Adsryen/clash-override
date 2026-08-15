@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { defaultGeneratorConfig } from './domain/config'
+import { serializeConfigFile } from './domain/config-file'
 import { renderScript } from './domain/script'
 
 const createObjectUrl = vi.fn(() => 'blob:generated-script')
@@ -102,6 +103,48 @@ describe('App', () => {
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent('not created by this generator'),
     )
+  })
+
+  it('imports a configuration file and restores the selected options', async () => {
+    const importedConfig = {
+      ...defaultGeneratorConfig,
+      ruleOptions: { ...defaultGeneratorConfig.ruleOptions, youtube: false },
+    }
+    render(<App />)
+
+    fireEvent.change(screen.getByLabelText('导入配置'), {
+      target: {
+        files: [createTextFile(serializeConfigFile(importedConfig), 'config.json')],
+      },
+    })
+
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'YouTube' })).not.toBeChecked(),
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('已导入配置 config.json')
+  })
+
+  it('restores the default configuration after confirmation', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(<App />)
+
+    await user.click(screen.getByRole('checkbox', { name: 'YouTube' }))
+    await user.click(screen.getByRole('button', { name: '恢复默认' }))
+
+    expect(screen.getByRole('checkbox', { name: 'YouTube' })).toBeChecked()
+    expect(window.confirm).toHaveBeenCalledOnce()
+  })
+
+  it('exports the current configuration as a JSON file', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '导出配置' }))
+
+    expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob))
+    expect(anchorClick).toHaveBeenCalledOnce()
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:generated-script')
   })
 
   it('saves and reloads a named preset', async () => {

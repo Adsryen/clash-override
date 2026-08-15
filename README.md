@@ -86,7 +86,7 @@
 
 ### 方式四：在线可视化生成脚本
 
-打开 [在线生成器](https://adsryen.github.io/clash-override/) 即可使用。所有选项、草稿和生成结果只在浏览器本地处理，不需要安装 Node.js，也不会上传配置。
+打开 [在线生成器](https://adsryen.github.io/clash-override/) 即可使用。所有选项、草稿和生成结果只在浏览器本地处理，不需要安装 Node.js，也不会上传配置。页面支持导出和导入当前配置 JSON，方便备份或换浏览器继续使用。
 
 ![Clash Override 在线脚本生成器](.github/screenshots/generator-desktop.png)
 
@@ -100,7 +100,7 @@ npm install
 npm run local
 ```
 
-需要 Node.js 18 或更新版本。工具只监听 `127.0.0.1`；草稿和预设只保存在当前浏览器。它只能重新导入本工具生成过、带版本化配置标记的脚本，不会猜测或修改手写 JavaScript。
+需要 Node.js 18 或更新版本。工具只监听 `127.0.0.1`；草稿和预设只保存在当前浏览器。可以通过配置 JSON 备份当前开关状态，也可以重新导入本工具生成过、带版本化配置标记的脚本；工具不会猜测或修改手写 JavaScript。
 
 ## ⚙️ 配置说明
 

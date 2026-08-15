@@ -12,6 +12,13 @@
 curl -O https://github.com/Adsryen/clash-override/raw/main/global_script.js
 ```
 
+也可以直接下载已经压缩好的
+[global_script.min.js](../../global_script.min.js)，或使用对应的在线地址：
+
+```bash
+curl -O https://github.com/Adsryen/clash-override/raw/main/global_script.min.js
+```
+
 ### Clash Verge Rev
 
 1. 打开 Clash Verge Rev。

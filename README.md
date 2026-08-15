@@ -7,9 +7,9 @@
 
 - **GitHub 仓库**：[https://github.com/Adsryen/clash-override](https://github.com/Adsryen/clash-override)
 - **直接下载**：[https://raw.githubusercontent.com/Adsryen/clash-override/main/global_script.js](https://raw.githubusercontent.com/Adsryen/clash-override/main/global_script.js)
+- **压缩版直接下载**：[https://raw.githubusercontent.com/Adsryen/clash-override/main/global_script.min.js](https://raw.githubusercontent.com/Adsryen/clash-override/main/global_script.min.js)
 - **在线查看**：[查看源码](https://github.com/Adsryen/clash-override/blob/main/global_script.js)
 - **在线生成器**：[无需安装直接使用](https://adsryen.github.io/clash-override/)
-- **发布版本**：[查看最新 Release](https://github.com/Adsryen/clash-override/releases/latest)
 
 ## 📋 项目简介
 

@@ -34,6 +34,8 @@ assert.match(ciSource, /pages: write/)
 assert.match(ciSource, /--base=\/\$\{\{ github\.event\.repository\.name \}\}\//)
 assert.match(ciSource, /npx playwright install --with-deps chromium/)
 assert.match(ciSource, /npm run test:e2e/)
+assert.match(ciSource, /node --check global_script\.min\.js/)
+assert.match(ciSource, /npm run test:min-script/)
 
 assert.deepEqual(releaseWorkflow.on.push.tags, ['v*'])
 assert.ok(releaseWorkflow.jobs.release)
@@ -42,8 +44,10 @@ assert.match(releaseSource, /actions\/setup-node@v5/)
 assert.match(releaseSource, /node --check \.\.\/global_script\.js/)
 assert.match(
     releaseSource,
-    /gh release create "\$GITHUB_REF_NAME" "global_script\.js#全局覆写脚本"/,
+    /gh release create "\$GITHUB_REF_NAME" "global_script\.js#全局覆写脚本" "global_script\.min\.js#压缩版全局覆写脚本"/,
 )
+assert.match(releaseSource, /node --check \.\.\/global_script\.min\.js/)
+assert.match(releaseSource, /npm run test:min-script/)
 assert.match(releaseSource, /gh release create/)
 assert.match(releaseSource, /contents: write/)
 

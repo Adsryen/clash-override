@@ -40,7 +40,9 @@ jobs:
       - name: 验证覆写脚本与规则
         run: |
           node --check ../global_script.js
+          node --check ../global_script.min.js
           npm run test:country-site-groups
+          npm run test:min-script
           npm run test:rule-priorities
           npm run test:workflows
         working-directory: test
@@ -48,4 +50,4 @@ jobs:
       - name: 创建 GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" "global_script.js#全局覆写脚本" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" "global_script.js#全局覆写脚本" "global_script.min.js#压缩版全局覆写脚本" --generate-notes

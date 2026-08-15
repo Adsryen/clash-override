@@ -58,11 +58,14 @@ jobs:
         working-directory: test
 
       - name: 检查覆写脚本语法
-        run: node --check global_script.js
+        run: |
+          node --check global_script.js
+          node --check global_script.min.js
 
       - name: 运行规则回归测试
         run: |
           npm run test:country-site-groups
+          npm run test:min-script
           npm run test:rule-priorities
           npm run test:workflows
         working-directory: test

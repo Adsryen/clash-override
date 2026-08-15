@@ -247,6 +247,98 @@ legend {
   font-size: 14px;
 }
 
+.section-heading p {
+  margin: -6px 0 14px;
+  color: #63746e;
+  font-size: 12px;
+}
+
+.custom-rule-adder {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+
+.custom-rule-adder label,
+.custom-rule-target,
+.custom-rule-fields label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  color: #52655f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.custom-rule-adder label {
+  flex: 1;
+}
+
+.custom-rule-adder input,
+.custom-rule-target input,
+.custom-rule-fields textarea {
+  width: 100%;
+  border: 1px solid #b4c2ba;
+  border-radius: 4px;
+  padding: 7px 8px;
+  color: #213833;
+  background: #fff;
+  font-size: 14px;
+}
+
+.custom-rule-adder input,
+.custom-rule-target input {
+  min-height: 36px;
+}
+
+.custom-rule-fields textarea {
+  min-height: 74px;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.custom-rule-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.custom-rule-card {
+  border: 1px solid #d2dcd5;
+  border-radius: 5px;
+  padding: 12px;
+  background: #f8fbf9;
+}
+
+.custom-rule-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.custom-rule-card-header h3 {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #24413b;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 14px;
+}
+
+.custom-rule-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.empty-state {
+  margin: 0;
+  color: #71807a;
+  font-size: 13px;
+}
+
 .preset-loader {
   margin-top: 10px;
 }
@@ -346,5 +438,28 @@ legend {
   .preset-editor .button,
   .preset-loader .button {
     flex: 1;
+  }
+
+  .custom-rule-adder,
+  .custom-rule-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .custom-rule-adder {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .custom-rule-adder .button {
+    width: 100%;
+  }
+
+  .custom-rule-fields {
+    display: grid;
+  }
+
+  .custom-rule-card-header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

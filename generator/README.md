@@ -46,10 +46,17 @@ not parsed or modified.
 
 ## Scope
 
-The first version exposes the main switch, URL test, DNS override, every
-`ruleOptions` service switch, automatic region detection, and high-ratio node
-filtering. Custom rules, YAML configuration, subscription editing, and node
-editing remain in `global_script.js` and are not managed by this UI.
+The generator exposes the main switch, URL test, DNS override, every
+`ruleOptions` service switch, automatic region detection, high-ratio node
+filtering, and custom routing rules. Add a rule with an English identifier,
+choose its target strategy group, and enter one domain, keyword, process name,
+or rule set per line. Custom rules are stored in the local draft, configuration
+backup, and generator metadata.
+
+The built-in rules in `global_script.js` remain available for advanced manual
+editing. The UI only injects user-added rules, so generated scripts do not grow
+by copying the whole built-in rule map. YAML configuration, subscription
+editing, and node editing are outside this tool's scope.
 
 ## Checks
 

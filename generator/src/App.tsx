@@ -1,6 +1,7 @@
-import { useMemo, useState, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import {
   defaultGeneratorConfig,
+  type CustomRule,
   type GeneratorConfig,
   type RuleOptionKey,
 } from './domain/config'
@@ -84,7 +85,53 @@ function cloneDefaultConfig(): GeneratorConfig {
     ...defaultGeneratorConfig,
     ruleOptions: { ...defaultGeneratorConfig.ruleOptions },
     regionOptions: { ...defaultGeneratorConfig.regionOptions },
+    customRules: Object.fromEntries(
+      Object.entries(defaultGeneratorConfig.customRules ?? {}).map(([name, rule]) => [name, {
+        ...rule,
+        domainSuffix: [...rule.domainSuffix],
+        domainKeyword: [...rule.domainKeyword],
+        domain: [...rule.domain],
+        processName: [...rule.processName],
+        ruleSets: [...rule.ruleSets],
+      }]),
+    ),
   }
+}
+
+const customRuleListFields = [
+  ['domainSuffix', '域名后缀'],
+  ['domainKeyword', '域名关键词'],
+  ['domain', '精确域名'],
+  ['processName', '进程名'],
+  ['ruleSets', '规则集'],
+] as const
+
+const reservedCustomRuleNames = new Set([
+  'direct',
+  'defaultProxy',
+  'downloadApps',
+  'japanSites',
+  'hkSites',
+  'usSites',
+])
+
+function createCustomRule(): CustomRule {
+  return {
+    target: 'DIRECT',
+    domainSuffix: [],
+    domainKeyword: [],
+    domain: [],
+    processName: [],
+    ruleSets: [],
+  }
+}
+
+function parseLineList(value: string): string[] {
+  return value.split('\n').map((item) => item.trim()).filter(Boolean)
+}
+
+function formatLineList(value: string[]): string {
+  return value.join('\n')
 }
 
 function downloadTextFile(source: string, filename: string, contentType: string) {
@@ -99,6 +146,7 @@ function downloadTextFile(source: string, filename: string, contentType: string)
 function App() {
   const [workspace, setWorkspace] = useState<GeneratorWorkspace>(() => loadWorkspace())
   const [presetName, setPresetName] = useState('')
+  const [customRuleName, setCustomRuleName] = useState('')
   const [selectedPresetId, setSelectedPresetId] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -129,6 +177,53 @@ function App() {
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : '无法导入脚本')
     }
+  }
+
+  const updateCustomRule = (name: string, changes: Partial<CustomRule>) => {
+    const customRules = workspace.draft.customRules ?? {}
+    const currentRule = customRules[name]
+    if (!currentRule) return
+
+    updateDraft({
+      ...workspace.draft,
+      customRules: {
+        ...customRules,
+        [name]: { ...currentRule, ...changes },
+      },
+    })
+  }
+
+  const handleAddCustomRule = () => {
+    const normalizedName = customRuleName.trim()
+    if (!/^[A-Za-z][A-Za-z0-9-]*$/.test(normalizedName)) {
+      setError('规则名称必须以英文字母开头，只能包含英文字母、数字和连字符')
+      return
+    }
+    if (reservedCustomRuleNames.has(normalizedName)) {
+      setError('规则名称与内置规则冲突，请更换名称')
+      return
+    }
+    if (workspace.draft.customRules?.[normalizedName]) {
+      setError('规则名称已存在，请更换名称')
+      return
+    }
+
+    updateDraft({
+      ...workspace.draft,
+      customRules: {
+        ...(workspace.draft.customRules ?? {}),
+        [normalizedName]: createCustomRule(),
+      },
+    })
+    setCustomRuleName('')
+    setNotice(`已添加规则 ${normalizedName}`)
+  }
+
+  const handleDeleteCustomRule = (name: string) => {
+    const customRules = { ...(workspace.draft.customRules ?? {}) }
+    delete customRules[name]
+    updateDraft({ ...workspace.draft, customRules })
+    setNotice(`已删除规则 ${name}`)
   }
 
   const handleConfigImport = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -359,6 +454,42 @@ function App() {
             </div>
           </section>
 
+          <section className="settings-section custom-rules" aria-labelledby="custom-rules-heading">
+            <div className="section-heading">
+              <div>
+                <h2 id="custom-rules-heading">自定义规则</h2>
+                <p>每行填写一项，生成脚本时会追加到内置规则。</p>
+              </div>
+            </div>
+            <div className="custom-rule-adder">
+              <label>
+                <span>规则名称</span>
+                <input
+                  value={customRuleName}
+                  onChange={(event) => setCustomRuleName(event.target.value)}
+                  placeholder="例如 gamingSites"
+                />
+              </label>
+              <button className="button secondary" type="button" onClick={handleAddCustomRule}>
+                添加规则
+              </button>
+            </div>
+            <div className="custom-rule-list">
+              {Object.entries(workspace.draft.customRules ?? {}).map(([name, rule]) => (
+                <CustomRuleEditor
+                  key={name}
+                  name={name}
+                  rule={rule}
+                  onChange={(changes) => updateCustomRule(name, changes)}
+                  onDelete={() => handleDeleteCustomRule(name)}
+                />
+              ))}
+              {Object.keys(workspace.draft.customRules ?? {}).length === 0 && (
+                <p className="empty-state">暂未添加自定义规则。</p>
+              )}
+            </div>
+          </section>
+
           {ruleOptionGroups.map((group) => (
             <fieldset className="settings-section option-group" key={group.title}>
               <legend>{group.title}</legend>
@@ -409,6 +540,57 @@ function Toggle({ label, checked, onChange }: ToggleProps) {
         onChange={(event) => onChange(event.target.checked)}
       />
     </label>
+  )
+}
+
+interface CustomRuleEditorProps {
+  name: string
+  rule: CustomRule
+  onChange: (changes: Partial<CustomRule>) => void
+  onDelete: () => void
+}
+
+function CustomRuleEditor({ name, rule, onChange, onDelete }: CustomRuleEditorProps) {
+  const [target, setTarget] = useState(rule.target)
+
+  useEffect(() => {
+    setTarget(rule.target)
+  }, [rule.target])
+
+  return (
+    <article className="custom-rule-card">
+      <div className="custom-rule-card-header">
+        <h3>{name}</h3>
+        <button className="button danger" type="button" onClick={onDelete}>
+          删除规则 {name}
+        </button>
+      </div>
+      <label className="custom-rule-target">
+        <span>规则目标 {name}</span>
+        <input
+          value={target}
+          onChange={(event) => {
+            const nextTarget = event.target.value
+            setTarget(nextTarget)
+            if (nextTarget.trim()) {
+              onChange({ target: nextTarget })
+            }
+          }}
+        />
+      </label>
+      <div className="custom-rule-fields">
+        {customRuleListFields.map(([field, label]) => (
+          <label key={field}>
+            <span>{label} {name}</span>
+            <textarea
+              value={formatLineList(rule[field])}
+              onChange={(event) => onChange({ [field]: parseLineList(event.target.value) })}
+              rows={3}
+            />
+          </label>
+        ))}
+      </div>
+    </article>
   )
 }
 

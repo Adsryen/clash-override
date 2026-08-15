@@ -147,6 +147,27 @@ describe('App', () => {
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:generated-script')
   })
 
+  it('adds and removes a custom rule from the generated configuration', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.type(screen.getByRole('textbox', { name: '规则名称' }), 'gamingSites')
+    await user.click(screen.getByRole('button', { name: '添加规则' }))
+    await user.clear(screen.getByRole('textbox', { name: '规则目标 gamingSites' }))
+    await user.type(screen.getByRole('textbox', { name: '规则目标 gamingSites' }), 'DIRECT')
+    await user.type(
+      screen.getByRole('textbox', { name: '域名后缀 gamingSites' }),
+      'example.com',
+    )
+
+    expect(screen.getByTestId('script-preview')).toHaveTextContent('"gamingSites"')
+    expect(screen.getByTestId('script-preview')).toHaveTextContent('example.com')
+
+    await user.click(screen.getByRole('button', { name: '删除规则 gamingSites' }))
+
+    expect(screen.getByTestId('script-preview')).not.toHaveTextContent('"gamingSites"')
+  })
+
   it('saves and reloads a named preset', async () => {
     const user = userEvent.setup()
     render(<App />)

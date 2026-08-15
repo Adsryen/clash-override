@@ -22,6 +22,35 @@ describe('generated scripts', () => {
     expect(script).toContain('const generatorConfig =')
   })
 
+  it('merges user custom rules into the generated script', () => {
+    const config = {
+      ...defaultGeneratorConfig,
+      customRules: {
+        gamingSites: {
+          target: 'DIRECT',
+          domainSuffix: ['example.com'],
+          domainKeyword: [],
+          domain: [],
+          processName: [],
+          ruleSets: [],
+        },
+      },
+    }
+
+    const script = renderScript(config)
+    const main = new Function(`${script}\nreturn main`)() as (
+      config: Record<string, unknown>,
+    ) => Record<string, unknown>
+    const result = main({
+      proxies: [{ name: 'Hong Kong 01' }],
+      'proxy-groups': [],
+      rules: [],
+    })
+
+    expect(script).toContain('"gamingSites"')
+    expect(result.rules).toContain('DOMAIN-SUFFIX,example.com,DIRECT')
+  })
+
   it('rejects scripts that were not created by the generator', () => {
     expect(() => parseGeneratedScript('const enable = true')).toThrow(
       'not created by this generator',

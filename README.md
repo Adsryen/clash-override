@@ -159,12 +159,15 @@ const regionOptions = {
 
 ### 自定义规则
 
-在 `customRules` 中添加自定义分流规则：
+在线生成器支持在“自定义规则”区域新增规则。规则名称使用英文字母开头的字母、数字或连字符，例如 `gamingSites`；目标填写策略组名称，每个域名、关键词、进程名或规则集一行。规则会写入配置 JSON，并随生成脚本的元数据保存，之后可以继续导入编辑。
+
+如果需要编辑脚本内置的 `direct`、`defaultProxy` 等规则，仍可以直接修改 `global_script.js` 模板。生成器新增规则不能使用这些内置名称，也不会把整份内置规则复制到生成配置中。
+
+手写配置的结构如下：
 
 ```javascript
 const customRules = {
-    // 直连规则
-    direct: {
+    gamingSites: {
         target: 'DIRECT',
         domainSuffix: ['example.com'],      // 域名后缀
         domainKeyword: ['keyword'],         // 域名关键词
@@ -172,13 +175,6 @@ const customRules = {
         processName: ['app.exe'],           // 进程名称
         ruleSets: []                        // 规则集
     },
-    
-    // 代理规则
-    defaultProxy: {
-        target: '默认节点',
-        domainSuffix: ['proxy.com'],
-        // ...
-    }
 }
 ```
 
@@ -229,15 +225,17 @@ const enableUrltest = true  // true=自动，false=手动
 ```
 
 ### 4. 添加自定义规则
-需要特定网站走特定节点？在 `customRules` 中添加：
+需要特定网站走特定节点？优先在在线生成器的“自定义规则”区域添加；本地生成器会自动保存，并可通过“导出配置”备份。手写模板时可以按以下结构添加：
 
 ```javascript
 const customRules = {
-    // 示例：让某个网站走日本节点
-    japanSites: {
-        target: '日本网站',
+    gamingSites: {
+        target: '游戏专用',
         domainSuffix: ['example.jp'],
         domainKeyword: ['japan'],
+        domain: [],
+        processName: [],
+        ruleSets: [],
     }
 }
 ```

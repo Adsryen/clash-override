@@ -376,7 +376,7 @@ Object.entries(customRuleSets).forEach(([name, config]) => {
  * 5. 添加进程规则：在对应策略的 processName 数组中添加
  * 6. 添加规则集：在对应策略的 ruleSets 数组中添加
  */
-const customRules = {
+const defaultCustomRules = {
     // 直连规则 - 不走代理的网站和应用
     direct: {
         target: 'DIRECT',
@@ -441,6 +441,11 @@ const customRules = {
     //     domain: [],
     //     ruleSets: []
     // }
+}
+
+const customRules = {
+    ...defaultCustomRules,
+    ...(generatorConfig.customRules ?? {}),
 }
 
 /**

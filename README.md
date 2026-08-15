@@ -261,7 +261,7 @@ const customRules = {
 
 ## 📄 许可证
 
-本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
+本项目采用 BSD 3-Clause 许可证，包含基于 YaNet 的二次开发内容 - 详见 [LICENSE](LICENSE) 文件
 
 ## 🙏 致谢
 

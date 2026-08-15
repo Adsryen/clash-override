@@ -1,28 +1,31 @@
 /***
  * Clash Verge Rev 全局扩展脚本（懒人配置）/ Mihomo Party 覆写脚本
- * 基于二开: https://github.com/dahaha-365/YaNet/
+ * 项目地址: https://github.com/Adsryen/clash-override
  */
+
+/* @clash-override-generator:{"version":1,"config":{}} */
+const generatorConfig = {}
 
 /**
  * 整个脚本的总开关，在Mihomo Party使用的话，请保持为true
  * true = 启用
  * false = 禁用
  */
-const enable = true
+const enable = generatorConfig.enable ?? true
 
 /**
  * urltest自动选择开关
  * true = 使用urltest自动选择最低延迟节点
  * false = 使用select手动选择节点
  */
-const enableUrltest = false
+const enableUrltest = generatorConfig.enableUrltest ?? false
 
 /**
  * DNS覆写总开关
  * true = 启用
  * false = 禁用
  */
-const enableDnsOverride = false
+const enableDnsOverride = generatorConfig.enableDnsOverride ?? false
 
 // ===== 性能优化：预编译正则表达式 =====
 const RATIO_REGEX = /[xX✕✖⨉倍率](\d+(?:\.\d+)?)[xX✕✖⨉倍率]?/i
@@ -61,6 +64,7 @@ const ruleOptions = {
     russia: true, // 俄罗斯网站策略组
     tracker: true, // 网络分析和跟踪服务
     ads: true, // 常见的网络广告
+    ...(generatorConfig.ruleOptions ?? {}),
 }
 
 /**
@@ -70,8 +74,8 @@ const ruleOptions = {
  * 倍率大于regions里的ratioLimit值的代理节点会被排除
  */
 const regionOptions = {
-    excludeHighPercentage: true,
-    autoDetect: true,
+    excludeHighPercentage: generatorConfig.regionOptions?.excludeHighPercentage ?? true,
+    autoDetect: generatorConfig.regionOptions?.autoDetect ?? true,
     defaultIcon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Proxy.png',
     regions: [
         {

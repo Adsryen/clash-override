@@ -1,0 +1,60 @@
+import { describe, expect, it } from 'vitest'
+import {
+  defaultGeneratorConfig,
+  parseGeneratedScript,
+  renderScript,
+} from './script'
+
+describe('generated scripts', () => {
+  it('round-trips a service option through script metadata', () => {
+    const config = {
+      ...defaultGeneratorConfig,
+      ruleOptions: { ...defaultGeneratorConfig.ruleOptions, youtube: false },
+    }
+
+    expect(parseGeneratedScript(renderScript(config))).toEqual(config)
+  })
+
+  it('writes the versioned generator marker into the complete script', () => {
+    const script = renderScript(defaultGeneratorConfig)
+
+    expect(script).toContain('/* @clash-override-generator:')
+    expect(script).toContain('const generatorConfig =')
+  })
+
+  it('rejects scripts that were not created by the generator', () => {
+    expect(() => parseGeneratedScript('const enable = true')).toThrow(
+      'not created by this generator',
+    )
+  })
+
+  it('rejects malformed or unsupported generator metadata', () => {
+    expect(() =>
+      parseGeneratedScript(
+        '/* @clash-override-generator:{"version":2,"config":{}} */',
+      ),
+    ).toThrow('unsupported generator version')
+
+    expect(() =>
+      parseGeneratedScript(
+        '/* @clash-override-generator:{"version":1,"config":{"enable":"yes"}} */',
+      ),
+    ).toThrow('invalid generator configuration')
+  })
+
+  it('executes the generated override script with a minimal proxy config', () => {
+    const main = new Function(`${renderScript(defaultGeneratorConfig)}\nreturn main`)() as (
+      config: Record<string, unknown>,
+    ) => Record<string, unknown>
+    const config = {
+      proxies: [{ name: 'Hong Kong 01' }],
+      'proxy-groups': [],
+      rules: [],
+    }
+
+    const result = main(config)
+
+    expect(result.rules).toEqual(expect.any(Array))
+    expect(result['proxy-groups']).toEqual(expect.any(Array))
+  })
+})

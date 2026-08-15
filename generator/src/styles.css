@@ -172,6 +172,7 @@ legend {
 
 .workbench {
   display: grid;
+  align-items: start;
   grid-template-columns: minmax(430px, 0.9fr) minmax(520px, 1.1fr);
   gap: 24px;
   padding-top: 24px;
@@ -352,7 +353,7 @@ legend {
 .preview-panel {
   display: flex;
   min-width: 0;
-  min-height: 760px;
+  height: clamp(520px, 75vh, 760px);
   flex-direction: column;
   border: 1px solid #2c4540;
   border-radius: 6px;
@@ -406,7 +407,7 @@ legend {
   }
 
   .preview-panel {
-    min-height: 620px;
+    height: clamp(480px, 70vh, 620px);
   }
 }
 

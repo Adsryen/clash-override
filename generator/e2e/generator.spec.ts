@@ -21,6 +21,16 @@ test('loads the production build and edits a custom rule', async ({ page }) => {
   await expect(page.getByTestId('script-preview')).toContainText('"target":"俄罗斯网站"')
 })
 
+test('keeps the script preview in a fixed scrollable area', async ({ page }) => {
+  const metrics = await page.getByTestId('script-preview').evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }))
+
+  expect(metrics.clientHeight).toBeLessThanOrEqual(724)
+  expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight)
+})
+
 test('restores the rule after a reload and downloads one script file', async ({ page }) => {
   await page.getByRole('textbox', { name: '规则名称' }).fill('localSites')
   await page.getByRole('button', { name: '添加规则' }).click()

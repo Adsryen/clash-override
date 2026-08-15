@@ -84,3 +84,25 @@ test('exports and imports a configuration file', async ({ page }) => {
   await expect(page.getByRole('status')).toHaveText(/^已导入配置 /)
   await expect(appleToggle).not.toBeChecked()
 })
+
+test('downloads a compressed script that can be imported again', async ({ page }) => {
+  const youtubeToggle = page.getByRole('checkbox', { name: 'YouTube' })
+  await youtubeToggle.uncheck()
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: '下载压缩版' }).click()
+  const download = await downloadPromise
+  const minifiedScriptPath = await download.path()
+
+  expect(download.suggestedFilename()).toBe('global_script.min.js')
+  expect(minifiedScriptPath).not.toBeNull()
+
+  await page.evaluate(() => localStorage.clear())
+  await page.reload()
+  await expect(youtubeToggle).toBeChecked()
+
+  await page.getByLabel('导入生成器脚本').setInputFiles(minifiedScriptPath ?? '')
+
+  await expect(page.getByRole('status')).toHaveText(/^已导入 /)
+  await expect(youtubeToggle).not.toBeChecked()
+})

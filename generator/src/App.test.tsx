@@ -214,4 +214,15 @@ describe('App', () => {
     expect(anchorClick).toHaveBeenCalledOnce()
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:generated-script')
   })
+
+  it('downloads a compressed generated script', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '下载压缩版' }))
+
+    await waitFor(() => expect(anchorClick).toHaveBeenCalledOnce())
+    expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob))
+    expect(screen.getByRole('status')).toHaveTextContent('压缩脚本已下载')
+  })
 })

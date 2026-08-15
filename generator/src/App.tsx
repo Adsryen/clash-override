@@ -6,6 +6,7 @@ import {
   type RuleOptionKey,
 } from './domain/config'
 import { parseConfigFile, serializeConfigFile } from './domain/config-file'
+import { minifyGeneratedScript } from './domain/minify'
 import { parseGeneratedScript, renderScript } from './domain/script'
 import {
   deletePreset,
@@ -188,6 +189,7 @@ function App() {
   const [selectedPresetId, setSelectedPresetId] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [isMinifying, setIsMinifying] = useState(false)
   const script = useMemo(() => renderScript(workspace.draft), [workspace.draft])
 
   const updateDraft = (draft: GeneratorConfig) => {
@@ -329,6 +331,24 @@ function App() {
     setNotice('脚本已下载')
   }
 
+  const handleDownloadMinified = async () => {
+    setIsMinifying(true)
+
+    try {
+      downloadTextFile(
+        await minifyGeneratedScript(script),
+        'global_script.min.js',
+        'text/javascript',
+      )
+      setError(null)
+      setNotice('压缩脚本已下载')
+    } catch (minifyError) {
+      setError(minifyError instanceof Error ? minifyError.message : '无法压缩脚本')
+    } finally {
+      setIsMinifying(false)
+    }
+  }
+
   const handleConfigExport = () => {
     downloadTextFile(
       serializeConfigFile(workspace.draft),
@@ -394,6 +414,14 @@ function App() {
           </button>
           <button className="button primary" type="button" onClick={handleDownload}>
             下载脚本
+          </button>
+          <button
+            className="button secondary"
+            type="button"
+            disabled={isMinifying}
+            onClick={handleDownloadMinified}
+          >
+            {isMinifying ? '正在压缩...' : '下载压缩版'}
           </button>
         </div>
       </header>

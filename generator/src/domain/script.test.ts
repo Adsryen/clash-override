@@ -4,6 +4,7 @@ import {
   parseGeneratedScript,
   renderScript,
 } from './script'
+import { minifyGeneratedScript } from './minify'
 
 describe('generated scripts', () => {
   it('round-trips a service option through script metadata', () => {
@@ -85,5 +86,25 @@ describe('generated scripts', () => {
 
     expect(result.rules).toEqual(expect.any(Array))
     expect(result['proxy-groups']).toEqual(expect.any(Array))
+  })
+
+  it('minifies a generated script without losing its editable configuration or entry point', async () => {
+    const script = renderScript({
+      ...defaultGeneratorConfig,
+      ruleOptions: { ...defaultGeneratorConfig.ruleOptions, youtube: false },
+    })
+
+    const minifiedScript = await minifyGeneratedScript(script)
+    const main = new Function(`${minifiedScript}\nreturn main`)() as (
+      config: Record<string, unknown>,
+    ) => Record<string, unknown>
+
+    expect(minifiedScript.length).toBeLessThan(script.length)
+    expect(parseGeneratedScript(minifiedScript)).toEqual(
+      parseGeneratedScript(script),
+    )
+    expect(
+      main({ proxies: [{ name: 'Hong Kong 01' }], 'proxy-groups': [], rules: [] }).rules,
+    ).toEqual(expect.any(Array))
   })
 })

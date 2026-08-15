@@ -14,6 +14,9 @@ node_modules/
 generator/.vite/
 generator/dist/
 generator/tsconfig.tsbuildinfo
+generator/test-results/
+generator/playwright-report/
+generator/blob-report/
 
 # ide+ai
 .vscode/

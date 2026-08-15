@@ -6,14 +6,19 @@
   "scripts": {
     "local": "vite --host 127.0.0.1 --open",
     "build": "tsc -b && vite build",
+    "build:e2e": "tsc -b && vite build --mode e2e",
+    "preview": "vite preview",
+    "preview:e2e": "vite preview --mode e2e",
     "typecheck": "tsc -b --pretty false",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@testing-library/user-event": "^14.6.1",

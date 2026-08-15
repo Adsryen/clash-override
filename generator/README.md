@@ -64,4 +64,11 @@ editing, and node editing are outside this tool's scope.
 npm run test
 npm run typecheck
 npm run build
+npx playwright install chromium
+npm run test:e2e
 ```
+
+The browser installation is only required before the first local Playwright
+run. The E2E suite uses a production build mounted at `/clash-override/` to
+verify the GitHub Pages asset path, rule editing, local persistence, and script
+download.

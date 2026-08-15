@@ -45,6 +45,14 @@ jobs:
         run: npm run build
         working-directory: generator
 
+      - name: 安装 Playwright Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: generator
+
+      - name: 运行生成器浏览器测试
+        run: npm run test:e2e
+        working-directory: generator
+
       - name: 安装规则测试依赖
         run: npm ci
         working-directory: test

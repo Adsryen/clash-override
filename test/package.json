@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "test:country-site-groups": "node test_country_site_groups.js",
     "test:rule-priorities": "node test_rule_priorities.js"
   },
   "dependencies": {

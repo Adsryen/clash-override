@@ -58,6 +58,7 @@ const ruleOptions = {
     japan: true, // 日本网站策略组
     hongkong: true, // 香港网站策略组
     unitedstates: true, // 美国网站策略组
+    russia: true, // 俄罗斯网站策略组
     tracker: true, // 网络分析和跟踪服务
     ads: true, // 常见的网络广告
 }
@@ -489,6 +490,64 @@ function generateCustomRules() {
 
 // 生成最终的规则数组
 const rules = generateCustomRules()
+
+const countrySiteGroups = [
+    {
+        option: 'japan',
+        name: '日本网站',
+        proxyStrategy: 'region-preferred',
+        preferredRegion: 'JP日本',
+        rules: [
+            'RULE-SET,category-bank-jp,日本网站',
+            'GEOIP,jp,日本网站,no-resolve',
+        ],
+        provider: {
+            key: 'category-bank-jp',
+            behavior: 'domain',
+            format: 'mrs',
+            url: 'https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-bank-jp.mrs',
+            path: './ruleset/MetaCubeX/category-bank-jp.mrs',
+        },
+        url: 'https://r.r10s.jp/com/img/home/logo/touch.png',
+        icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/JP.png',
+    },
+    {
+        option: 'hongkong',
+        name: '香港网站',
+        proxyStrategy: 'region-preferred',
+        preferredRegion: 'HK香港',
+        rules: ['GEOIP,HK,香港网站,no-resolve'],
+        url: 'http://www.gstatic.com/generate_204',
+        icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/HK.png',
+    },
+    {
+        option: 'unitedstates',
+        name: '美国网站',
+        proxyStrategy: 'region-preferred',
+        preferredRegion: 'US美国',
+        rules: ['GEOIP,US,美国网站,no-resolve'],
+        url: 'http://www.gstatic.com/generate_204',
+        icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/US.png',
+    },
+    {
+        option: 'russia',
+        name: '俄罗斯网站',
+        proxyStrategy: 'direct-first',
+        rules: [
+            'RULE-SET,category-ru,俄罗斯网站',
+            'GEOIP,RU,俄罗斯网站,no-resolve',
+        ],
+        provider: {
+            key: 'category-ru',
+            behavior: 'domain',
+            format: 'mrs',
+            url: 'https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-ru.mrs',
+            path: './ruleset/MetaCubeX/category-ru.mrs',
+        },
+        url: 'https://yandex.ru/favicon.ico',
+        icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Russia.png',
+    },
+]
 
 // 程序入口
 function main(config) {
@@ -1032,63 +1091,36 @@ function main(config) {
             : ['默认节点', ...proxyGroupsRegionNames, '直连']
     }
 
-    if (ruleOptions.japan) {
-        rules.push(
-            'RULE-SET,category-bank-jp,日本网站',
-            'GEOIP,jp,日本网站,no-resolve'
-        )
-        ruleProviders.set('category-bank-jp', {
-            ...ruleProviderCommon,
-            behavior: 'domain',
-            format: 'mrs',
-            url: 'https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-bank-jp.mrs',
-            path: './ruleset/MetaCubeX/category-bank-jp.mrs',
-        })
+    const createCountrySiteProxies = (siteGroup) => {
+        if (siteGroup.proxyStrategy === 'direct-first') {
+            return ['直连', '默认节点', ...proxyGroupsRegionNames]
+        }
 
-        // 找到日本节点组，优先放在第一位
-        const jpProxies = createRegionPreferredProxies('JP日本')
+        return createRegionPreferredProxies(siteGroup.preferredRegion)
+    }
+
+    countrySiteGroups.forEach((siteGroup) => {
+        if (!ruleOptions[siteGroup.option]) return
+
+        rules.push(...siteGroup.rules)
+
+        if (siteGroup.provider) {
+            const { key, ...provider } = siteGroup.provider
+            ruleProviders.set(key, {
+                ...ruleProviderCommon,
+                ...provider,
+            })
+        }
 
         config['proxy-groups'].push({
             ...groupBaseOption,
-            name: '日本网站',
+            name: siteGroup.name,
             type: 'select',
-            proxies: jpProxies,
-            url: 'https://r.r10s.jp/com/img/home/logo/touch.png',
-            icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/JP.png',
+            proxies: createCountrySiteProxies(siteGroup),
+            url: siteGroup.url,
+            icon: siteGroup.icon,
         })
-    }
-
-    if (ruleOptions.hongkong) {
-        rules.push('GEOIP,HK,香港网站,no-resolve')
-
-        // 找到香港节点组，优先放在第一位
-        const hkProxies = createRegionPreferredProxies('HK香港')
-
-        config['proxy-groups'].push({
-            ...groupBaseOption,
-            name: '香港网站',
-            type: 'select',
-            proxies: hkProxies,
-            url: 'http://www.gstatic.com/generate_204',
-            icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/HK.png',
-        })
-    }
-
-    if (ruleOptions.unitedstates) {
-        rules.push('GEOIP,US,美国网站,no-resolve')
-
-        // 找到美国节点组，优先放在第一位
-        const usProxies = createRegionPreferredProxies('US美国')
-
-        config['proxy-groups'].push({
-            ...groupBaseOption,
-            name: '美国网站',
-            type: 'select',
-            proxies: usProxies,
-            url: 'http://www.gstatic.com/generate_204',
-            icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/US.png',
-        })
-    }
+    })
 
     rules.push(
         'GEOSITE,private,DIRECT',

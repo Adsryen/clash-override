@@ -276,6 +276,7 @@ legend {
 
 .custom-rule-adder input,
 .custom-rule-target input,
+.custom-rule-target-select select,
 .custom-rule-fields textarea {
   width: 100%;
   border: 1px solid #b4c2ba;
@@ -287,8 +288,13 @@ legend {
 }
 
 .custom-rule-adder input,
-.custom-rule-target input {
+.custom-rule-target input,
+.custom-rule-target-select select {
   min-height: 36px;
+}
+
+.custom-rule-target-select {
+  margin-top: 10px;
 }
 
 .custom-rule-fields textarea {

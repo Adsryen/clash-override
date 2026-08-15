@@ -106,6 +106,44 @@ const customRuleListFields = [
   ['ruleSets', '规则集'],
 ] as const
 
+const customRuleTargetOptions = [
+  'DIRECT',
+  'REJECT',
+  '默认节点',
+  '下载软件',
+  '国内网站',
+  '其他外网',
+  '日本网站',
+  '香港网站',
+  '美国网站',
+  '俄罗斯网站',
+  '游戏专用',
+  '跟踪分析',
+  '广告过滤',
+  '苹果服务',
+  '微软服务',
+  'Github',
+  '谷歌服务',
+  '国外AI',
+  'YouTube',
+  '巴哈姆特',
+  'Disney+',
+  'NETFLIX',
+  'Tiktok',
+  'Spotify',
+  'Pixiv',
+  'HBO',
+  'TVB',
+  'Prime Video',
+  'Hulu',
+  'Telegram',
+  'WhatsApp',
+  'Line',
+  '哔哩哔哩东南亚',
+] as const
+
+const customTargetValue = '__custom__'
+
 const reservedCustomRuleNames = new Set([
   'direct',
   'defaultProxy',
@@ -577,6 +615,26 @@ function CustomRuleEditor({ name, rule, onChange, onDelete }: CustomRuleEditorPr
             }
           }}
         />
+      </label>
+      <label className="custom-rule-target-select">
+        <span>常用策略组 {name}</span>
+        <select
+          value={customRuleTargetOptions.some((option) => option === rule.target)
+            ? rule.target
+            : customTargetValue}
+          onChange={(event) => {
+            if (event.target.value !== customTargetValue) {
+              onChange({ target: event.target.value })
+            }
+          }}
+        >
+          <option value={customTargetValue}>自定义目标</option>
+          {customRuleTargetOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
       </label>
       <div className="custom-rule-fields">
         {customRuleListFields.map(([field, label]) => (

@@ -168,6 +168,21 @@ describe('App', () => {
     expect(screen.getByTestId('script-preview')).not.toHaveTextContent('"gamingSites"')
   })
 
+  it('selects a built-in strategy group for a custom rule', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.type(screen.getByRole('textbox', { name: '规则名称' }), 'russiaSites')
+    await user.click(screen.getByRole('button', { name: '添加规则' }))
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: '常用策略组 russiaSites' }),
+      '俄罗斯网站',
+    )
+
+    expect(screen.getByRole('textbox', { name: '规则目标 russiaSites' })).toHaveValue('俄罗斯网站')
+    expect(screen.getByTestId('script-preview')).toHaveTextContent('"target":"俄罗斯网站"')
+  })
+
   it('saves and reloads a named preset', async () => {
     const user = userEvent.setup()
     render(<App />)

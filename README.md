@@ -8,6 +8,8 @@
 - **GitHub 仓库**：[https://github.com/Adsryen/clash-override](https://github.com/Adsryen/clash-override)
 - **直接下载**：[https://raw.githubusercontent.com/Adsryen/clash-override/main/global_script.js](https://raw.githubusercontent.com/Adsryen/clash-override/main/global_script.js)
 - **在线查看**：[查看源码](https://github.com/Adsryen/clash-override/blob/main/global_script.js)
+- **在线生成器**：[无需安装直接使用](https://adsryen.github.io/clash-override/)
+- **发布版本**：[查看最新 Release](https://github.com/Adsryen/clash-override/releases/latest)
 
 ## 📋 项目简介
 
@@ -82,9 +84,13 @@
 - 使用 **导入脚本** 功能，选择下载的文件
 - 或者填入在线地址自动获取
 
-### 方式四：本地可视化生成脚本
+### 方式四：在线可视化生成脚本
 
-仓库内的 [`generator/`](generator/README.md) 可以在本机通过网页调整脚本开关，并直接下载定制后的 `global_script.js`，不需要部署网站或上传任何配置。
+打开 [在线生成器](https://adsryen.github.io/clash-override/) 即可使用。所有选项、草稿和生成结果只在浏览器本地处理，不需要安装 Node.js，也不会上传配置。
+
+### 方式五：本地运行生成器
+
+仓库内的 [`generator/`](generator/README.md) 可以在本机通过网页调整脚本开关，并直接下载定制后的 `global_script.js`。
 
 ```bash
 cd generator

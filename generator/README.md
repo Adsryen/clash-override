@@ -4,6 +4,12 @@ This is a local browser tool for generating a customized `global_script.js`.
 It does not use a server, cloud account, upload endpoint, subscription URL, or
 remote configuration API.
 
+## Use without installation
+
+Open the [GitHub Pages generator](https://adsryen.github.io/clash-override/)
+to use the tool without Node.js. The generated script, draft, and presets stay
+in your browser and are not sent to a service.
+
 ## Requirements
 
 - Node.js 18 or newer

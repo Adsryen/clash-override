@@ -2,6 +2,11 @@
 *.yaml
 *.yml
 
+# GitHub Actions 工作流必须纳入版本控制
+!.github/
+!.github/workflows/
+!.github/workflows/*.yml
+
 # node模块
 node_modules/
 

@@ -1,0 +1,51 @@
+name: 发布覆写脚本
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 验证并发布覆写脚本
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: generator/package-lock.json
+
+      - name: 安装生成器依赖
+        run: npm ci
+        working-directory: generator
+
+      - name: 验证生成器
+        run: |
+          npm run test
+          npm run typecheck
+          npm run build
+        working-directory: generator
+
+      - name: 安装规则测试依赖
+        run: npm ci
+        working-directory: test
+
+      - name: 验证覆写脚本与规则
+        run: |
+          node --check ../global_script.js
+          npm run test:country-site-groups
+          npm run test:rule-priorities
+          npm run test:workflows
+        working-directory: test
+
+      - name: 创建 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "global_script.js#全局覆写脚本" --generate-notes

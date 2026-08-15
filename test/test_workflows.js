@@ -24,6 +24,8 @@ assert.deepEqual(ciWorkflow.on.pull_request.branches, ['main'])
 assert.ok(ciWorkflow.jobs.verify)
 assert.ok(ciWorkflow.jobs.deploy)
 assert.equal(ciWorkflow.jobs.deploy.needs, 'verify')
+assert.match(ciSource, /actions\/checkout@v5/)
+assert.match(ciSource, /actions\/setup-node@v5/)
 assert.match(ciSource, /actions\/configure-pages@v5/)
 assert.match(ciSource, /enablement: true/)
 assert.match(ciSource, /actions\/deploy-pages@v4/)
@@ -32,6 +34,8 @@ assert.match(ciSource, /--base=\/\$\{\{ github\.event\.repository\.name \}\}\//)
 
 assert.deepEqual(releaseWorkflow.on.push.tags, ['v*'])
 assert.ok(releaseWorkflow.jobs.release)
+assert.match(releaseSource, /actions\/checkout@v5/)
+assert.match(releaseSource, /actions\/setup-node@v5/)
 assert.match(releaseSource, /node --check \.\.\/global_script\.js/)
 assert.match(
     releaseSource,

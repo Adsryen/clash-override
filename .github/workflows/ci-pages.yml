@@ -20,10 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 检出仓库
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 配置 Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -73,7 +73,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: 检出仓库
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 配置 GitHub Pages
         uses: actions/configure-pages@v5
@@ -81,7 +81,7 @@ jobs:
           enablement: true
 
       - name: 配置 Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm

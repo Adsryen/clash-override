@@ -39,3 +39,48 @@ test('restores the rule after a reload and downloads one script file', async ({ 
 
   expect(download.suggestedFilename()).toBe('global_script.js')
 })
+
+test('imports a generated script and restores its custom rule', async ({ page }) => {
+  await page.getByRole('textbox', { name: '规则名称' }).fill('importedSites')
+  await page.getByRole('button', { name: '添加规则' }).click()
+  await page.getByRole('textbox', { name: '域名后缀 importedSites' }).fill('example.org')
+
+  const generatedScript = await page.getByTestId('script-preview').textContent()
+  expect(generatedScript).not.toBeNull()
+
+  await page.evaluate(() => localStorage.clear())
+  await page.reload()
+  await expect(page.getByText('暂未添加自定义规则。')).toBeVisible()
+
+  await page.getByLabel('导入生成器脚本').setInputFiles({
+    name: 'global_script.js',
+    mimeType: 'text/javascript',
+    buffer: Buffer.from(generatedScript ?? ''),
+  })
+
+  await expect(page.getByRole('status')).toHaveText('已导入 global_script.js')
+  await expect(page.getByRole('textbox', { name: '域名后缀 importedSites' })).toHaveValue(
+    'example.org',
+  )
+})
+
+test('exports and imports a configuration file', async ({ page }) => {
+  const appleToggle = page.getByRole('checkbox', { name: 'Apple' })
+  await appleToggle.uncheck()
+
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: '导出配置' }).click()
+  const download = await downloadPromise
+  const configPath = await download.path()
+
+  expect(download.suggestedFilename()).toBe('clash-override-config.json')
+  expect(configPath).not.toBeNull()
+
+  await appleToggle.check()
+  await expect(appleToggle).toBeChecked()
+
+  await page.getByLabel('导入配置').setInputFiles(configPath ?? '')
+
+  await expect(page.getByRole('status')).toHaveText(/^已导入配置 /)
+  await expect(appleToggle).not.toBeChecked()
+})

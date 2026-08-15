@@ -72,6 +72,26 @@ h1 {
   letter-spacing: 0;
 }
 
+.project-attribution {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  color: #577069;
+  font-size: 13px;
+}
+
+.project-attribution a {
+  color: #0f5d50;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.project-attribution a:hover {
+  text-decoration: underline;
+}
+
 h2,
 legend {
   margin-bottom: 12px;
@@ -303,11 +323,13 @@ legend {
   }
 
   .topbar-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
   }
 
   .topbar-actions .button {
-    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
     text-align: center;
   }
 

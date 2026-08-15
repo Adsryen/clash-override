@@ -35,6 +35,20 @@ describe('App', () => {
     vi.restoreAllMocks()
   })
 
+  it('links back to the source repository and star page', () => {
+    render(<App />)
+
+    const repositoryUrl = 'https://github.com/Adsryen/clash-override'
+    expect(screen.getByRole('link', { name: '查看 GitHub 仓库' })).toHaveAttribute(
+      'href',
+      repositoryUrl,
+    )
+    expect(screen.getByRole('link', { name: '给项目点 Star' })).toHaveAttribute(
+      'href',
+      repositoryUrl,
+    )
+  })
+
   it('updates the generated preview when a service switch changes', async () => {
     const user = userEvent.setup()
     render(<App />)

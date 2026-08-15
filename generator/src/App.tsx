@@ -177,6 +177,23 @@ function App() {
         <div>
           <p className="eyebrow">LOCAL WORKBENCH</p>
           <h1>Clash Override</h1>
+          <div className="project-attribution" aria-label="项目仓库">
+            <span>Adsryen/clash-override</span>
+            <a
+              href="https://github.com/Adsryen/clash-override"
+              target="_blank"
+              rel="noreferrer"
+            >
+              查看 GitHub 仓库
+            </a>
+            <a
+              href="https://github.com/Adsryen/clash-override"
+              target="_blank"
+              rel="noreferrer"
+            >
+              给项目点 Star
+            </a>
+          </div>
         </div>
         <div className="topbar-actions">
           <button className="button secondary" type="button" onClick={() => updateDraft(cloneDefaultConfig())}>

@@ -4,3 +4,20 @@
 
 # node模块
 node_modules/
+
+# 本地生成器构建产物与缓存
+generator/.vite/
+generator/dist/
+generator/tsconfig.tsbuildinfo
+
+# ide+ai
+.vscode/
+.idea/
+.trae/
+.agents/
+.claude/
+.codex/
+.trellis/
+AGENTS.md
+
+.gitattributes

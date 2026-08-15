@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "test:rule-priorities": "node test_rule_priorities.js"
+  },
   "dependencies": {
     "js-yaml": "^4.1.1"
   }

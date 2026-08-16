@@ -1,0 +1,116 @@
+name: 检查并部署生成器网页
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: 自动化检查
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v5
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: generator/package-lock.json
+
+      - name: 安装生成器依赖
+        run: npm ci
+        working-directory: generator
+
+      - name: 运行生成器测试
+        run: npm run test
+        working-directory: generator
+
+      - name: 检查生成器类型
+        run: npm run typecheck
+        working-directory: generator
+
+      - name: 构建生成器
+        run: npm run build
+        working-directory: generator
+
+      - name: 安装 Playwright Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: generator
+
+      - name: 运行生成器浏览器测试
+        run: npm run test:e2e
+        working-directory: generator
+
+      - name: 安装规则测试依赖
+        run: npm ci
+        working-directory: test
+
+      - name: 检查覆写脚本语法
+        run: |
+          node --check global_script.js
+          node --check global_script.min.js
+
+      - name: 运行规则回归测试
+        run: |
+          npm run test:country-site-groups
+          npm run test:min-script
+          npm run test:rule-priorities
+          npm run test:workflows
+        working-directory: test
+
+  deploy:
+    name: 部署 GitHub Pages
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v5
+
+      - name: 配置 GitHub Pages
+        uses: actions/configure-pages@v6
+        with:
+          enablement: true
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: generator/package-lock.json
+
+      - name: 安装生成器依赖
+        run: npm ci
+        working-directory: generator
+
+      - name: 构建 Pages 资源
+        run: npm run build -- --base=/${{ github.event.repository.name }}/
+        working-directory: generator
+
+      - name: 上传 Pages 工件
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: generator/dist
+
+      - name: 部署 Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

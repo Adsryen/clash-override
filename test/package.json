@@ -1,4 +1,10 @@
 {
+  "scripts": {
+    "test:country-site-groups": "node test_country_site_groups.js",
+    "test:min-script": "node test_min_script.js",
+    "test:rule-priorities": "node test_rule_priorities.js",
+    "test:workflows": "node test_workflows.js"
+  },
   "dependencies": {
     "js-yaml": "^4.1.1"
   }

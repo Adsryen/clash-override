@@ -1,28 +1,31 @@
 /***
  * Clash Verge Rev 全局扩展脚本（懒人配置）/ Mihomo Party 覆写脚本
- * 基于二开: https://github.com/dahaha-365/YaNet/
+ * 项目地址: https://github.com/Adsryen/clash-override
  */
+
+/* @clash-override-generator:{"version":1,"config":{}} */
+const generatorConfig = {}
 
 /**
  * 整个脚本的总开关，在Mihomo Party使用的话，请保持为true
  * true = 启用
  * false = 禁用
  */
-const enable = true
+const enable = generatorConfig.enable ?? true
 
 /**
  * urltest自动选择开关
  * true = 使用urltest自动选择最低延迟节点
  * false = 使用select手动选择节点
  */
-const enableUrltest = false
+const enableUrltest = generatorConfig.enableUrltest ?? false
 
 /**
  * DNS覆写总开关
  * true = 启用
  * false = 禁用
  */
-const enableDnsOverride = false
+const enableDnsOverride = generatorConfig.enableDnsOverride ?? false
 
 // ===== 性能优化：预编译正则表达式 =====
 const RATIO_REGEX = /[xX✕✖⨉倍率](\d+(?:\.\d+)?)[xX✕✖⨉倍率]?/i
@@ -58,8 +61,10 @@ const ruleOptions = {
     japan: true, // 日本网站策略组
     hongkong: true, // 香港网站策略组
     unitedstates: true, // 美国网站策略组
+    russia: true, // 俄罗斯网站策略组
     tracker: true, // 网络分析和跟踪服务
     ads: true, // 常见的网络广告
+    ...(generatorConfig.ruleOptions ?? {}),
 }
 
 /**
@@ -69,8 +74,8 @@ const ruleOptions = {
  * 倍率大于regions里的ratioLimit值的代理节点会被排除
  */
 const regionOptions = {
-    excludeHighPercentage: true,
-    autoDetect: true,
+    excludeHighPercentage: generatorConfig.regionOptions?.excludeHighPercentage ?? true,
+    autoDetect: generatorConfig.regionOptions?.autoDetect ?? true,
     defaultIcon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Proxy.png',
     regions: [
         {
@@ -371,7 +376,7 @@ Object.entries(customRuleSets).forEach(([name, config]) => {
  * 5. 添加进程规则：在对应策略的 processName 数组中添加
  * 6. 添加规则集：在对应策略的 ruleSets 数组中添加
  */
-const customRules = {
+const defaultCustomRules = {
     // 直连规则 - 不走代理的网站和应用
     direct: {
         target: 'DIRECT',
@@ -438,6 +443,11 @@ const customRules = {
     // }
 }
 
+const customRules = {
+    ...defaultCustomRules,
+    ...(generatorConfig.customRules ?? {}),
+}
+
 /**
  * 生成规则数组的函数 - 通用化处理
  */
@@ -489,6 +499,64 @@ function generateCustomRules() {
 
 // 生成最终的规则数组
 const rules = generateCustomRules()
+
+const countrySiteGroups = [
+    {
+        option: 'japan',
+        name: '日本网站',
+        proxyStrategy: 'region-preferred',
+        preferredRegion: 'JP日本',
+        rules: [
+            'RULE-SET,category-bank-jp,日本网站',
+            'GEOIP,jp,日本网站,no-resolve',
+        ],
+        provider: {
+            key: 'category-bank-jp',
+            behavior: 'domain',
+            format: 'mrs',
+            url: 'https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-bank-jp.mrs',
+            path: './ruleset/MetaCubeX/category-bank-jp.mrs',
+        },
+        url: 'https://r.r10s.jp/com/img/home/logo/touch.png',
+        icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/JP.png',
+    },
+    {
+        option: 'hongkong',
+        name: '香港网站',
+        proxyStrategy: 'region-preferred',
+        preferredRegion: 'HK香港',
+        rules: ['GEOIP,HK,香港网站,no-resolve'],
+        url: 'http://www.gstatic.com/generate_204',
+        icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/HK.png',
+    },
+    {
+        option: 'unitedstates',
+        name: '美国网站',
+        proxyStrategy: 'region-preferred',
+        preferredRegion: 'US美国',
+        rules: ['GEOIP,US,美国网站,no-resolve'],
+        url: 'http://www.gstatic.com/generate_204',
+        icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/US.png',
+    },
+    {
+        option: 'russia',
+        name: '俄罗斯网站',
+        proxyStrategy: 'direct-first',
+        rules: [
+            'RULE-SET,category-ru,俄罗斯网站',
+            'GEOIP,RU,俄罗斯网站,no-resolve',
+        ],
+        provider: {
+            key: 'category-ru',
+            behavior: 'domain',
+            format: 'mrs',
+            url: 'https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-ru.mrs',
+            path: './ruleset/MetaCubeX/category-ru.mrs',
+        },
+        url: 'https://yandex.ru/favicon.ico',
+        icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Russia.png',
+    },
+]
 
 // 程序入口
 function main(config) {
@@ -1001,18 +1069,6 @@ function main(config) {
         })
     }
 
-    if (ruleOptions.microsoft) {
-        rules.push('GEOSITE,microsoft@cn,国内网站', 'GEOSITE,microsoft,微软服务')
-        config['proxy-groups'].push({
-            ...groupBaseOption,
-            name: '微软服务',
-            type: 'select',
-            proxies: ['默认节点', ...proxyGroupsRegionNames, '直连'],
-            url: 'http://www.msftconnecttest.com/connecttest.txt',
-            icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Microsoft.png',
-        })
-    }
-
     if (ruleOptions.github) {
         rules.push('GEOSITE,github,Github')
         config['proxy-groups'].push({
@@ -1025,6 +1081,18 @@ function main(config) {
         })
     }
 
+    if (ruleOptions.microsoft) {
+        rules.push('GEOSITE,microsoft@cn,国内网站', 'GEOSITE,microsoft,微软服务')
+        config['proxy-groups'].push({
+            ...groupBaseOption,
+            name: '微软服务',
+            type: 'select',
+            proxies: ['默认节点', ...proxyGroupsRegionNames, '直连'],
+            url: 'http://www.msftconnecttest.com/connecttest.txt',
+            icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/Microsoft.png',
+        })
+    }
+
     const createRegionPreferredProxies = (preferredGroupName) => {
         const otherRegionNames = proxyGroupsRegionNames.filter(name => name !== preferredGroupName)
         return proxyGroupsRegionNames.includes(preferredGroupName)
@@ -1032,63 +1100,36 @@ function main(config) {
             : ['默认节点', ...proxyGroupsRegionNames, '直连']
     }
 
-    if (ruleOptions.japan) {
-        rules.push(
-            'RULE-SET,category-bank-jp,日本网站',
-            'GEOIP,jp,日本网站,no-resolve'
-        )
-        ruleProviders.set('category-bank-jp', {
-            ...ruleProviderCommon,
-            behavior: 'domain',
-            format: 'mrs',
-            url: 'https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo/geosite/category-bank-jp.mrs',
-            path: './ruleset/MetaCubeX/category-bank-jp.mrs',
-        })
+    const createCountrySiteProxies = (siteGroup) => {
+        if (siteGroup.proxyStrategy === 'direct-first') {
+            return ['直连', '默认节点', ...proxyGroupsRegionNames]
+        }
 
-        // 找到日本节点组，优先放在第一位
-        const jpProxies = createRegionPreferredProxies('JP日本')
+        return createRegionPreferredProxies(siteGroup.preferredRegion)
+    }
+
+    countrySiteGroups.forEach((siteGroup) => {
+        if (!ruleOptions[siteGroup.option]) return
+
+        rules.push(...siteGroup.rules)
+
+        if (siteGroup.provider) {
+            const { key, ...provider } = siteGroup.provider
+            ruleProviders.set(key, {
+                ...ruleProviderCommon,
+                ...provider,
+            })
+        }
 
         config['proxy-groups'].push({
             ...groupBaseOption,
-            name: '日本网站',
+            name: siteGroup.name,
             type: 'select',
-            proxies: jpProxies,
-            url: 'https://r.r10s.jp/com/img/home/logo/touch.png',
-            icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/JP.png',
+            proxies: createCountrySiteProxies(siteGroup),
+            url: siteGroup.url,
+            icon: siteGroup.icon,
         })
-    }
-
-    if (ruleOptions.hongkong) {
-        rules.push('GEOIP,HK,香港网站,no-resolve')
-
-        // 找到香港节点组，优先放在第一位
-        const hkProxies = createRegionPreferredProxies('HK香港')
-
-        config['proxy-groups'].push({
-            ...groupBaseOption,
-            name: '香港网站',
-            type: 'select',
-            proxies: hkProxies,
-            url: 'http://www.gstatic.com/generate_204',
-            icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/HK.png',
-        })
-    }
-
-    if (ruleOptions.unitedstates) {
-        rules.push('GEOIP,US,美国网站,no-resolve')
-
-        // 找到美国节点组，优先放在第一位
-        const usProxies = createRegionPreferredProxies('US美国')
-
-        config['proxy-groups'].push({
-            ...groupBaseOption,
-            name: '美国网站',
-            type: 'select',
-            proxies: usProxies,
-            url: 'http://www.gstatic.com/generate_204',
-            icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure/IconSet/Color/US.png',
-        })
-    }
+    })
 
     rules.push(
         'GEOSITE,private,DIRECT',

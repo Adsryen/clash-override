@@ -157,7 +157,56 @@ legend {
   clip-path: inset(50%);
 }
 
+.file-input-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.file-actions {
+  position: relative;
+}
+
+.file-menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  min-width: 132px;
+  gap: 2px;
+  border: 1px solid #b4c2ba;
+  border-radius: 5px;
+  padding: 5px;
+  background: #fff;
+  box-shadow: 0 8px 20px rgb(18 54 45 / 12%);
+}
+
+.file-menu-item {
+  border: 0;
+  border-radius: 3px;
+  padding: 8px 10px;
+  color: #21463e;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.file-menu-item:hover,
+.file-menu-item:focus-visible {
+  background: #e6efea;
+}
+
 .status-message {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   margin: 16px 0;
   border-left: 4px solid #0f5d50;
   padding: 10px 12px;
@@ -170,6 +219,16 @@ legend {
   border-color: #b13a32;
   color: #76231e;
   background: #f7dfdc;
+}
+
+.status-action {
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: underline;
 }
 
 .settings-panel {
@@ -248,6 +307,13 @@ legend {
   font-size: 12px;
 }
 
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .custom-rule-adder {
   display: flex;
   align-items: end;
@@ -308,10 +374,60 @@ legend {
 }
 
 .content-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(140px, 0.35fr) auto;
   align-items: end;
   gap: 10px;
+  border-bottom: 1px solid #dfe7e2;
+  padding: 8px 0;
+  background: #fff;
+}
+
+.content-mode-toggle,
+.content-add-type-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.content-mode-toggle .button,
+.content-add-type-toggle .button {
+  min-height: 32px;
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.search-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-input-wrap input {
+  padding-right: 56px;
+}
+
+.search-clear {
+  position: absolute;
+  right: 6px;
+  border: 0;
+  padding: 3px 5px;
+  color: #0f5d50;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.content-add-workspace {
+  display: grid;
+  gap: 14px;
+  border: 1px solid #d2dcd5;
+  border-radius: 5px;
+  padding: 14px;
+  background: #f8fbf9;
 }
 
 .content-toolbar label,
@@ -421,6 +537,17 @@ legend {
   gap: 8px;
 }
 
+.content-input-field {
+  min-width: 0;
+}
+
+.content-input-error {
+  margin: 6px 0 0;
+  color: #8a2822;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .content-adder-actions {
   display: grid;
   gap: 6px;
@@ -502,6 +629,11 @@ legend {
   padding: 4px 8px;
   color: #b9dacd;
   font-size: 12px;
+}
+
+.file-status.pending {
+  border-color: #c99a43;
+  color: #f2d48e;
 }
 
 .preview-header-meta {
@@ -682,6 +814,28 @@ legend {
   font-weight: 700;
 }
 
+.sidebar-item-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sidebar-item-label > span:first-child {
+  font-size: 14px;
+}
+
+.sidebar-item .sidebar-badge {
+  min-width: 18px;
+  border-radius: 9px;
+  padding: 1px 5px;
+  color: #477067;
+  background: #d9e9e0;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 10px;
+  text-align: center;
+}
+
 .sidebar-item small {
   color: #71807a;
   font-size: 11px;
@@ -730,6 +884,12 @@ legend {
   color: #27705c;
   background: #ecf6ef;
   font-size: 12px;
+}
+
+.draft-status.pending {
+  border-color: #e0bf77;
+  color: #8a5c16;
+  background: #fff7df;
 }
 
 .settings-panel {
@@ -1011,6 +1171,25 @@ legend {
     flex-direction: column;
   }
 
+  .section-heading {
+    flex-direction: column;
+  }
+
+  .content-toolbar {
+    position: static;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .content-mode-toggle,
+  .content-add-type-toggle {
+    width: 100%;
+  }
+
+  .content-mode-toggle .button,
+  .content-add-type-toggle .button {
+    flex: 1;
+  }
+
   .workbench.preview-open .preview-panel {
     grid-column: auto;
     height: min(70vh, 600px);
@@ -1022,6 +1201,12 @@ legend {
 
   .content-change-list {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .script-preview {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 }
 

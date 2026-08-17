@@ -203,6 +203,8 @@ function calculateReduction(originalBytes: number, compressedBytes: number): num
 }
 
 type ContentCategory = 'all' | 'rules' | 'ruleProviders' | 'proxyGroups'
+type ContentMode = 'browse' | 'add'
+type ContentAddType = 'rule' | 'ruleProvider' | 'proxyGroup'
 
 function isContentCategory(value: string): value is ContentCategory {
   return value === 'all' || value === 'rules' || value === 'ruleProviders' || value === 'proxyGroups'
@@ -284,6 +286,13 @@ function parseProxyGroupJson(value: string): ProxyGroupConfig[] | null {
   const groups = Array.isArray(parsed) ? parsed : [parsed]
   if (groups.length === 0 || groups.some((group) => !isProxyGroupConfig(group))) return null
   return groups
+}
+
+function contentInputError(error: string | null, addType: ContentAddType): string | null {
+  const prefix = addType === 'rule'
+    ? '规则内容'
+    : addType === 'ruleProvider' ? '规则提供者' : '策略组'
+  return error?.startsWith(prefix) ? error : null
 }
 
 function createPreviewDraft(
@@ -380,11 +389,15 @@ function App() {
   const [isMinifying, setIsMinifying] = useState(false)
   const [activeSection, setActiveSection] = useState<WorkbenchSection>('overview')
   const [isPreviewOpen, setIsPreviewOpen] = useState(true)
+  const [isFileMenuOpen, setIsFileMenuOpen] = useState(false)
   const [contentSearch, setContentSearch] = useState('')
   const [contentCategory, setContentCategory] = useState<ContentCategory>('all')
+  const [contentMode, setContentMode] = useState<ContentMode>('browse')
+  const [contentAddType, setContentAddType] = useState<ContentAddType>('rule')
   const [newContentRule, setNewContentRule] = useState('')
   const [newRuleProviderJson, setNewRuleProviderJson] = useState('')
   const [newProxyGroupJson, setNewProxyGroupJson] = useState('')
+  const [undoAction, setUndoAction] = useState<{ label: string; contentOverrides: GeneratorConfig['contentOverrides'] } | null>(null)
   const [minifiedStats, setMinifiedStats] = useState<{
     size: number
     reduction: number
@@ -394,6 +407,9 @@ function App() {
     [newContentRule, newProxyGroupJson, newRuleProviderJson, workspace.draft],
   )
   const script = useMemo(() => renderScript(previewDraft), [previewDraft])
+  const hasPendingPreviewEdits = Boolean(
+    newContentRule.trim() || parseRuleProviderJson(newRuleProviderJson) || parseProxyGroupJson(newProxyGroupJson),
+  )
   const generatedContent = useMemo(() => inspectGeneratedContent(workspace.draft), [workspace.draft])
   const contentChanges = useMemo(() => contentChangeSummaries(previewDraft), [previewDraft])
   const filteredContent = useMemo(() => {
@@ -413,7 +429,23 @@ function App() {
     [workspace.draft.ruleOptions],
   )
   const customRuleCount = Object.keys(workspace.draft.customRules ?? {}).length
+  const contentChangeCount = contentChanges.reduce((count, change) => count + change.added.length + change.removed.length, 0)
+  const sectionBadges: Partial<Record<WorkbenchSection, string>> = {
+    custom: customRuleCount > 0 ? String(customRuleCount) : undefined,
+    content: contentChangeCount > 0 ? String(contentChangeCount) : undefined,
+    presets: workspace.presets.length > 0 ? String(workspace.presets.length) : undefined,
+  }
   const activeSectionDefinition = workbenchSections.find(({ id }) => id === activeSection)
+
+  useEffect(() => {
+    setMinifiedStats(null)
+  }, [script])
+
+  const clearPendingContentEditors = () => {
+    setNewContentRule('')
+    setNewRuleProviderJson('')
+    setNewProxyGroupJson('')
+  }
 
   const updateDraft = (draft: GeneratorConfig) => {
     const updatedWorkspace = { ...workspace, draft, recentScript: renderScript(draft) }
@@ -421,6 +453,7 @@ function App() {
     setWorkspace(updatedWorkspace)
     setError(null)
     setMinifiedStats(null)
+    setUndoAction(null)
   }
 
   const updateRuleOption = (key: RuleOptionKey, enabled: boolean) => {
@@ -437,6 +470,7 @@ function App() {
 
     try {
       updateDraft(parseGeneratedScript(await file.text()))
+      clearPendingContentEditors()
       setNotice(`已导入 ${file.name}`)
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : '无法导入脚本')
@@ -496,6 +530,7 @@ function App() {
 
   const handleDeleteContent = (entry: ContentEntry) => {
     const overrides = cloneContentOverrides(workspace.draft)
+    const overridesBeforeDelete = cloneContentOverrides(workspace.draft)
     if (entry.category === 'rules') {
       overrides.rules.add = overrides.rules.add.filter((rule) => rule !== entry.value)
       if (!overrides.rules.remove.includes(entry.value)) overrides.rules.remove.push(entry.value)
@@ -507,7 +542,14 @@ function App() {
       if (!overrides.proxyGroups.remove.includes(entry.label)) overrides.proxyGroups.remove.push(entry.label)
     }
     updateContentOverrides(overrides)
+    setUndoAction({ label: entry.label, contentOverrides: overridesBeforeDelete })
     setNotice(`已删除脚本${entry.category === 'rules' ? '规则' : entry.category === 'ruleProviders' ? '提供者' : '策略组'} ${entry.label}`)
+  }
+
+  const handleUndoDelete = () => {
+    if (!undoAction) return
+    updateContentOverrides(undoAction.contentOverrides)
+    setNotice(`已恢复脚本内容 ${undoAction.label}`)
   }
 
   const handleAddContentRule = () => {
@@ -573,6 +615,21 @@ function App() {
     setNotice('已填入策略组模板，请按需修改后添加')
   }
 
+  const handleContentRuleChange = (value: string) => {
+    setNewContentRule(value)
+    setError(null)
+  }
+
+  const handleRuleProviderJsonChange = (value: string) => {
+    setNewRuleProviderJson(value)
+    setError(null)
+  }
+
+  const handleProxyGroupJsonChange = (value: string) => {
+    setNewProxyGroupJson(value)
+    setError(null)
+  }
+
   const handleConfigImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -580,6 +637,7 @@ function App() {
 
     try {
       updateDraft(parseConfigFile(await file.text()))
+      clearPendingContentEditors()
       setNotice(`已导入配置 ${file.name}`)
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : '无法导入配置')
@@ -590,6 +648,7 @@ function App() {
     if (!window.confirm('确定恢复默认配置吗？当前配置将被覆盖。')) return
 
     updateDraft(cloneDefaultConfig())
+    clearPendingContentEditors()
     setNotice('已恢复默认配置')
   }
 
@@ -613,6 +672,7 @@ function App() {
     if (!preset) return
 
     updateDraft(preset.config)
+    clearPendingContentEditors()
     setNotice(`已加载 ${preset.name}`)
   }
 
@@ -721,14 +781,19 @@ function App() {
             entries={filteredContent}
             search={contentSearch}
             category={contentCategory}
+            mode={contentMode}
+            addType={contentAddType}
             newRule={newContentRule}
             providerJson={newRuleProviderJson}
             proxyGroupJson={newProxyGroupJson}
+            error={error}
             onSearchChange={setContentSearch}
             onCategoryChange={setContentCategory}
-            onRuleChange={setNewContentRule}
-            onProviderJsonChange={setNewRuleProviderJson}
-            onProxyGroupJsonChange={setNewProxyGroupJson}
+            onModeChange={setContentMode}
+            onAddTypeChange={setContentAddType}
+            onRuleChange={handleContentRuleChange}
+            onProviderJsonChange={handleRuleProviderJsonChange}
+            onProxyGroupJsonChange={handleProxyGroupJsonChange}
             onDelete={handleDeleteContent}
             onAddRule={handleAddContentRule}
             onAddProvider={handleAddRuleProvider}
@@ -781,29 +846,46 @@ function App() {
           <button className="button secondary" type="button" onClick={handleReset}>
             恢复默认
           </button>
-          <label className="button secondary file-button" htmlFor="config-import">
-            导入配置
-            <input
-              id="config-import"
-              aria-label="导入配置"
-              type="file"
-              accept=".json,application/json"
-              onChange={handleConfigImport}
-            />
-          </label>
-          <button className="button secondary" type="button" onClick={handleConfigExport}>
-            导出配置
-          </button>
-          <label className="button secondary file-button" htmlFor="script-import">
-            导入脚本
-            <input
-              id="script-import"
-              aria-label="导入生成器脚本"
-              type="file"
-              accept=".js,text/javascript"
-              onChange={handleImport}
-            />
-          </label>
+          <div className="file-actions">
+            <button
+              className="button secondary"
+              type="button"
+              aria-expanded={isFileMenuOpen}
+              aria-haspopup="menu"
+              onClick={() => setIsFileMenuOpen((open) => !open)}
+            >
+              文件操作
+            </button>
+            {isFileMenuOpen && (
+              <div className="file-menu" role="menu" aria-label="文件操作菜单">
+                <button className="file-menu-item" role="menuitem" type="button" onClick={() => document.getElementById('config-import')?.click()}>
+                  导入配置
+                </button>
+                <button className="file-menu-item" role="menuitem" type="button" onClick={() => document.getElementById('script-import')?.click()}>
+                  导入脚本
+                </button>
+                <button className="file-menu-item" role="menuitem" type="button" onClick={() => { handleConfigExport(); setIsFileMenuOpen(false) }}>
+                  导出配置
+                </button>
+              </div>
+            )}
+          </div>
+          <input
+            id="config-import"
+            className="file-input-hidden"
+            aria-label="导入配置"
+            type="file"
+            accept=".json,application/json"
+            onChange={(event) => { setIsFileMenuOpen(false); void handleConfigImport(event) }}
+          />
+          <input
+            id="script-import"
+            className="file-input-hidden"
+            aria-label="导入生成器脚本"
+            type="file"
+            accept=".js,text/javascript"
+            onChange={(event) => { setIsFileMenuOpen(false); void handleImport(event) }}
+          />
           <button
             className="button primary preview-toggle"
             type="button"
@@ -823,11 +905,16 @@ function App() {
       {(error || notice) && (
         <div className={error ? 'status-message error' : 'status-message'} role={error ? 'alert' : 'status'}>
           {error ?? notice}
+          {!error && undoAction && (
+            <button className="status-action" type="button" onClick={handleUndoDelete}>
+              撤销删除
+            </button>
+          )}
         </div>
       )}
 
       <div className={`workbench ${isPreviewOpen ? 'preview-open' : ''}`}>
-        <WorkbenchSidebar activeSection={activeSection} onChange={setActiveSection} />
+        <WorkbenchSidebar activeSection={activeSection} badges={sectionBadges} onChange={setActiveSection} />
         <section className="settings-panel" aria-label="脚本配置">
           <div className="section-header">
             <div>
@@ -835,7 +922,9 @@ function App() {
               <h2>{activeSectionDefinition?.label}</h2>
               <p>{activeSectionDefinition?.description}</p>
             </div>
-            <span className="draft-status">草稿已保存</span>
+            <span className={`draft-status ${hasPendingPreviewEdits ? 'pending' : ''}`}>
+              {hasPendingPreviewEdits ? '预览中有未提交编辑' : '已保存'}
+            </span>
           </div>
           {renderSection()}
         </section>
@@ -845,6 +934,7 @@ function App() {
             scriptSize={scriptSize}
             minifiedStats={minifiedStats}
             contentChanges={contentChanges}
+            previewStatus={hasPendingPreviewEdits ? '预览中' : '已生成'}
             onClose={() => setIsPreviewOpen(false)}
             onCopy={handleCopy}
             onDownload={handleDownload}
@@ -859,10 +949,11 @@ function App() {
 
 interface WorkbenchSidebarProps {
   activeSection: WorkbenchSection
+  badges: Partial<Record<WorkbenchSection, string>>
   onChange: (section: WorkbenchSection) => void
 }
 
-function WorkbenchSidebar({ activeSection, onChange }: WorkbenchSidebarProps) {
+function WorkbenchSidebar({ activeSection, badges, onChange }: WorkbenchSidebarProps) {
   return (
     <nav className="workbench-sidebar" aria-label="配置分组">
       <p className="sidebar-label">WORKSPACE</p>
@@ -888,7 +979,7 @@ function WorkbenchSidebar({ activeSection, onChange }: WorkbenchSidebarProps) {
             aria-current={activeSection === section.id ? 'page' : undefined}
             onClick={() => onChange(section.id)}
           >
-            <span>{section.label}</span>
+              <span className="sidebar-item-label"><span>{section.label}</span>{badges[section.id] && <span className="sidebar-badge">{badges[section.id]}</span>}</span>
             <small>{section.description}</small>
           </button>
         ))}
@@ -1023,11 +1114,16 @@ interface ScriptContentSectionProps {
   entries: ContentEntry[]
   search: string
   category: ContentCategory
+  mode: ContentMode
+  addType: ContentAddType
   newRule: string
   providerJson: string
   proxyGroupJson: string
+  error: string | null
   onSearchChange: (value: string) => void
   onCategoryChange: (value: ContentCategory) => void
+  onModeChange: (value: ContentMode) => void
+  onAddTypeChange: (value: ContentAddType) => void
   onRuleChange: (value: string) => void
   onProviderJsonChange: (value: string) => void
   onProxyGroupJsonChange: (value: string) => void
@@ -1043,11 +1139,16 @@ function ScriptContentSection({
   entries,
   search,
   category,
+  mode,
+  addType,
   newRule,
   providerJson,
   proxyGroupJson,
+  error,
   onSearchChange,
   onCategoryChange,
+  onModeChange,
+  onAddTypeChange,
   onRuleChange,
   onProviderJsonChange,
   onProxyGroupJsonChange,
@@ -1058,94 +1159,145 @@ function ScriptContentSection({
   onFillProviderTemplate,
   onFillProxyGroupTemplate,
 }: ScriptContentSectionProps) {
+  const inputError = contentInputError(error, addType)
+  const inputErrorId = `content-add-error-${addType}`
   return (
     <section className="settings-section script-content" aria-labelledby="script-content-heading">
       <div className="section-heading">
         <div>
           <h3 id="script-content-heading">脚本内容</h3>
-          <p>目录来自当前生成结果；编辑会同步保存到配置和脚本预览。</p>
+          <p>目录来自当前生成结果；有效编辑会即时反映到脚本预览。</p>
+        </div>
+        <div className="content-mode-toggle" role="group" aria-label="脚本内容视图">
+          <button className={`button ${mode === 'browse' ? 'primary' : 'secondary'}`} type="button" aria-pressed={mode === 'browse'} onClick={() => onModeChange('browse')}>浏览内容</button>
+          <button className={`button ${mode === 'add' ? 'primary' : 'secondary'}`} type="button" aria-pressed={mode === 'add'} onClick={() => onModeChange('add')}>添加内容</button>
         </div>
       </div>
-      <div className="content-toolbar">
-        <label>
-          <span>搜索脚本内容</span>
-          <input
-            type="search"
-            role="searchbox"
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-          />
-        </label>
-        <label>
-          <span>内容类别</span>
-          <select value={category} onChange={(event) => {
-            if (isContentCategory(event.target.value)) onCategoryChange(event.target.value)
-          }}>
-            <option value="all">全部</option>
-            <option value="rules">规则</option>
-            <option value="ruleProviders">规则提供者</option>
-            <option value="proxyGroups">策略组</option>
-          </select>
-        </label>
-        <span className="content-result-count" aria-live="polite">匹配 {entries.length} 项</span>
-      </div>
-      <div className="content-list" aria-label="脚本内容条目">
-        {entries.map((entry, index) => (
-          <article className="content-entry" key={`${entry.category}:${entry.label}:${index}`}>
-            <div className="content-entry-header">
-              <div className="content-entry-title">
-                <span className="content-entry-kind">
-                  {entry.category === 'rules' ? '规则' : entry.category === 'ruleProviders' ? '规则提供者' : '策略组'}
-                </span>
-                <strong>{entry.title}</strong>
-                <span className="content-entry-summary">{entry.summary}</span>
+      {mode === 'browse' ? (
+        <>
+          <div className="content-toolbar">
+            <label>
+              <span>搜索脚本内容</span>
+              <div className="search-input-wrap">
+                <input
+                  type="search"
+                  role="searchbox"
+                  value={search}
+                  onChange={(event) => onSearchChange(event.target.value)}
+                />
+                {search && <button className="search-clear" type="button" aria-label="清除搜索" onClick={() => onSearchChange('')}>清除</button>}
               </div>
-              <button
-                className="button danger content-delete"
-                type="button"
-                aria-label={`删除${entry.category === 'rules' ? '规则' : entry.category === 'ruleProviders' ? '提供者' : '策略组'} ${entry.label}`}
-                onClick={() => onDelete(entry)}
-              >
-                删除
-              </button>
+            </label>
+            <label>
+              <span>内容类别</span>
+              <select value={category} onChange={(event) => {
+                if (isContentCategory(event.target.value)) onCategoryChange(event.target.value)
+              }}>
+                <option value="all">全部</option>
+                <option value="rules">规则</option>
+                <option value="ruleProviders">规则提供者</option>
+                <option value="proxyGroups">策略组</option>
+              </select>
+            </label>
+            <span className="content-result-count" aria-live="polite">匹配 {entries.length} 项</span>
+          </div>
+          <div className="content-list" aria-label="脚本内容条目">
+            {entries.map((entry, index) => (
+              <article className="content-entry" key={`${entry.category}:${entry.label}:${index}`}>
+                <div className="content-entry-header">
+                  <div className="content-entry-title">
+                    <span className="content-entry-kind">
+                      {entry.category === 'rules' ? '规则' : entry.category === 'ruleProviders' ? '规则提供者' : '策略组'}
+                    </span>
+                    <strong>{entry.title}</strong>
+                    <span className="content-entry-summary">{entry.summary}</span>
+                  </div>
+                  <button
+                    className="button danger content-delete"
+                    type="button"
+                    aria-label={`删除${entry.category === 'rules' ? '规则' : entry.category === 'ruleProviders' ? '提供者' : '策略组'} ${entry.label}`}
+                    onClick={() => onDelete(entry)}
+                  >
+                    删除
+                  </button>
+                </div>
+                <details className="content-entry-details">
+                  <summary>查看完整内容</summary>
+                  <pre className="content-entry-value">{entry.value}</pre>
+                </details>
+              </article>
+            ))}
+            {entries.length === 0 && <p className="empty-state">没有匹配的脚本内容。</p>}
+          </div>
+        </>
+      ) : (
+        <div className="content-add-workspace">
+          <div className="content-add-type-toggle" role="group" aria-label="添加内容类型">
+            <button className={`button ${addType === 'rule' ? 'primary' : 'secondary'}`} type="button" aria-pressed={addType === 'rule'} onClick={() => onAddTypeChange('rule')}>添加规则</button>
+            <button className={`button ${addType === 'ruleProvider' ? 'primary' : 'secondary'}`} type="button" aria-pressed={addType === 'ruleProvider'} onClick={() => onAddTypeChange('ruleProvider')}>规则提供者</button>
+            <button className={`button ${addType === 'proxyGroup' ? 'primary' : 'secondary'}`} type="button" aria-pressed={addType === 'proxyGroup'} onClick={() => onAddTypeChange('proxyGroup')}>策略组</button>
+          </div>
+          {addType === 'rule' && (
+            <div className="content-adder">
+              <div className="content-input-field">
+                <label>
+                  <span>新增规则</span>
+                  <input
+                    value={newRule}
+                    aria-invalid={inputError ? true : undefined}
+                    aria-describedby={inputError ? inputErrorId : undefined}
+                    onChange={(event) => onRuleChange(event.target.value)}
+                  />
+                </label>
+                {inputError && <p className="content-input-error" id={inputErrorId}>{inputError}</p>}
+              </div>
+              <button className="button secondary" type="button" onClick={onAddRule}>添加脚本规则</button>
             </div>
-            <details className="content-entry-details">
-              <summary>查看完整内容</summary>
-              <pre className="content-entry-value">{entry.value}</pre>
-            </details>
-          </article>
-        ))}
-        {entries.length === 0 && <p className="empty-state">没有匹配的脚本内容。</p>}
-      </div>
-      <div className="content-adders">
-        <div className="content-adder">
-          <label>
-            <span>新增规则</span>
-            <input value={newRule} onChange={(event) => onRuleChange(event.target.value)} />
-          </label>
-          <button className="button secondary" type="button" onClick={onAddRule}>添加脚本规则</button>
+          )}
+          {addType === 'ruleProvider' && (
+            <div className="content-adder">
+              <div className="content-input-field">
+                <label>
+                  <span>新增规则提供者 JSON</span>
+                  <textarea
+                    value={providerJson}
+                    aria-invalid={inputError ? true : undefined}
+                    aria-describedby={inputError ? inputErrorId : undefined}
+                    onChange={(event) => onProviderJsonChange(event.target.value)}
+                    rows={8}
+                  />
+                </label>
+                {inputError && <p className="content-input-error" id={inputErrorId}>{inputError}</p>}
+              </div>
+              <div className="content-adder-actions">
+                <button className="button secondary" type="button" onClick={onFillProviderTemplate}>填入规则提供者模板</button>
+                <button className="button secondary" type="button" onClick={onAddProvider}>添加规则提供者</button>
+              </div>
+            </div>
+          )}
+          {addType === 'proxyGroup' && (
+            <div className="content-adder">
+              <div className="content-input-field">
+                <label>
+                  <span>新增策略组 JSON</span>
+                  <textarea
+                    value={proxyGroupJson}
+                    aria-invalid={inputError ? true : undefined}
+                    aria-describedby={inputError ? inputErrorId : undefined}
+                    onChange={(event) => onProxyGroupJsonChange(event.target.value)}
+                    rows={8}
+                  />
+                </label>
+                {inputError && <p className="content-input-error" id={inputErrorId}>{inputError}</p>}
+              </div>
+              <div className="content-adder-actions">
+                <button className="button secondary" type="button" onClick={onFillProxyGroupTemplate}>填入策略组模板</button>
+                <button className="button secondary" type="button" onClick={onAddProxyGroup}>添加策略组</button>
+              </div>
+            </div>
+          )}
         </div>
-        <div className="content-adder">
-          <label>
-            <span>新增规则提供者 JSON</span>
-            <textarea value={providerJson} onChange={(event) => onProviderJsonChange(event.target.value)} rows={5} />
-          </label>
-          <div className="content-adder-actions">
-            <button className="button secondary" type="button" onClick={onFillProviderTemplate}>填入规则提供者模板</button>
-            <button className="button secondary" type="button" onClick={onAddProvider}>添加规则提供者</button>
-          </div>
-        </div>
-        <div className="content-adder">
-          <label>
-            <span>新增策略组 JSON</span>
-            <textarea value={proxyGroupJson} onChange={(event) => onProxyGroupJsonChange(event.target.value)} rows={5} />
-          </label>
-          <div className="content-adder-actions">
-            <button className="button secondary" type="button" onClick={onFillProxyGroupTemplate}>填入策略组模板</button>
-            <button className="button secondary" type="button" onClick={onAddProxyGroup}>添加策略组</button>
-          </div>
-        </div>
-      </div>
+      )}
     </section>
   )
 }
@@ -1176,6 +1328,7 @@ interface PreviewDrawerProps {
   scriptSize: number
   minifiedStats: { size: number; reduction: number } | null
   contentChanges: ContentChangeSummary[]
+  previewStatus: string
   onClose: () => void
   onCopy: () => void
   onDownload: () => void
@@ -1183,13 +1336,13 @@ interface PreviewDrawerProps {
   isMinifying: boolean
 }
 
-function PreviewDrawer({ script, scriptSize, minifiedStats, contentChanges, onClose, onCopy, onDownload, onDownloadMinified, isMinifying }: PreviewDrawerProps) {
+function PreviewDrawer({ script, scriptSize, minifiedStats, contentChanges, previewStatus, onClose, onCopy, onDownload, onDownloadMinified, isMinifying }: PreviewDrawerProps) {
   const hasContentChanges = contentChanges.some(({ added, removed }) => added.length > 0 || removed.length > 0)
   return (
     <aside className="preview-panel" id="script-preview-drawer" aria-label="脚本预览" aria-modal="false">
       <div className="preview-header">
         <div><p className="eyebrow">OUTPUT</p><h2>global_script.js</h2></div>
-        <div className="preview-header-meta"><button className="button secondary preview-close" type="button" aria-label="关闭预览面板" aria-expanded="true" aria-controls="script-preview-drawer" onClick={onClose}>关闭</button><span className="file-status">已生成</span></div>
+        <div className="preview-header-meta"><button className="button secondary preview-close" type="button" aria-label="关闭预览面板" aria-expanded="true" aria-controls="script-preview-drawer" onClick={onClose}>关闭</button><span className={`file-status ${previewStatus === '预览中' ? 'pending' : ''}`}>{previewStatus}</span></div>
       </div>
       <div className="preview-actions"><button className="button secondary" type="button" onClick={onCopy}>复制预览脚本</button><button className="button secondary" type="button" onClick={onDownload}>下载预览脚本</button><button className="button secondary" type="button" disabled={isMinifying} onClick={onDownloadMinified}>{isMinifying ? '正在压缩...' : '下载预览压缩版'}</button></div>
       <div className="compression-summary" aria-label="脚本大小"><span>普通版 {formatBytes(scriptSize)}</span>{minifiedStats && <><span>压缩版 {formatBytes(minifiedStats.size)}</span><span>减少 {minifiedStats.reduction.toFixed(1)}%</span></>}</div>

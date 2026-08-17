@@ -147,11 +147,27 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: '导出配置' }))
+    await user.click(screen.getByRole('button', { name: '文件操作' }))
+    await user.click(screen.getByRole('menuitem', { name: '导出配置' }))
 
     expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob))
     expect(anchorClick).toHaveBeenCalledOnce()
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:generated-script')
+  })
+
+  it('groups file operations behind an accessible menu', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    expect(screen.queryByRole('button', { name: '导出配置' })).not.toBeInTheDocument()
+    const fileMenu = screen.getByRole('button', { name: '文件操作' })
+    expect(fileMenu).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(fileMenu)
+    expect(fileMenu).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('menuitem', { name: '导入配置' })).toBeVisible()
+    expect(screen.getByRole('menuitem', { name: '导入脚本' })).toBeVisible()
+    expect(screen.getByRole('menuitem', { name: '导出配置' })).toBeVisible()
   })
 
   it('adds and removes a custom rule from the generated configuration', async () => {
@@ -348,19 +364,40 @@ describe('App', () => {
     expect(screen.getByRole('status')).toHaveTextContent('已删除脚本规则')
   })
 
+  it('separates content browsing from adding and can clear the search', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '脚本内容' }))
+    expect(screen.getByRole('button', { name: '添加内容' })).toBeVisible()
+    expect(screen.getByRole('searchbox', { name: '搜索脚本内容' })).toBeVisible()
+    expect(screen.queryByRole('textbox', { name: '新增规则' })).not.toBeInTheDocument()
+
+    const search = screen.getByRole('searchbox', { name: '搜索脚本内容' })
+    await user.type(search, '谷歌服务')
+    await user.click(screen.getByRole('button', { name: '清除搜索' }))
+    expect(search).toHaveValue('')
+
+    await user.click(screen.getByRole('button', { name: '添加内容' }))
+    expect(screen.getByRole('button', { name: '浏览内容' })).toBeVisible()
+    expect(screen.getByRole('textbox', { name: '新增规则' })).toBeVisible()
+    await user.type(screen.getByRole('textbox', { name: '新增规则' }), 'DOMAIN-SUFFIX,mode.example,DIRECT')
+    expect(screen.getByTestId('script-preview')).toHaveTextContent('DOMAIN-SUFFIX,mode.example,DIRECT')
+  })
+
   it('previews content edits immediately while saving only after submission', async () => {
     const user = userEvent.setup()
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: '脚本内容' }))
-    expect(screen.getByRole('button', { name: '删除规则 GEOSITE,google,谷歌服务' })).toHaveTextContent('删除')
-    expect(screen.getAllByText('查看完整内容').length).toBeGreaterThan(0)
+    await user.click(screen.getByRole('button', { name: '添加内容' }))
 
     const workspaceBeforeEdit = localStorage.getItem(generatorWorkspaceStorageKey)
     await user.type(screen.getByRole('textbox', { name: '新增规则' }), 'DOMAIN-SUFFIX,live.example,DIRECT')
     expect(screen.getByTestId('script-preview')).toHaveTextContent('DOMAIN-SUFFIX,live.example,DIRECT')
     expect(localStorage.getItem(generatorWorkspaceStorageKey)).toBe(workspaceBeforeEdit)
 
+    await user.click(screen.getByRole('button', { name: '规则提供者' }))
     await user.click(screen.getByRole('button', { name: '填入规则提供者模板' }))
     const providerInput = screen.getByRole('textbox', { name: '新增规则提供者 JSON' })
     expect(providerInput).toHaveDisplayValue(/example-provider/)
@@ -369,9 +406,51 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '添加规则提供者' }))
     expect(screen.getByTestId('script-preview')).toHaveTextContent('example-provider')
 
+    await user.click(screen.getByRole('button', { name: '策略组' }))
     await user.click(screen.getByRole('button', { name: '填入策略组模板' }))
     expect(screen.getByRole('textbox', { name: '新增策略组 JSON' })).toHaveDisplayValue(/示例策略组/)
     expect(screen.getByTestId('script-preview')).toHaveTextContent('示例策略组')
+  })
+
+  it('labels temporary content edits as preview-only', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    expect(screen.getByText('已保存')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '脚本内容' }))
+    await user.click(screen.getByRole('button', { name: '添加内容' }))
+    await user.type(screen.getByRole('textbox', { name: '新增规则' }), 'DOMAIN-SUFFIX,pending.example,DIRECT')
+
+    expect(screen.getByText('预览中有未提交编辑')).toBeVisible()
+    expect(screen.queryByText('已保存')).not.toBeInTheDocument()
+  })
+
+  it('clears compressed statistics when the preview script changes', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '下载预览压缩版' }))
+    await waitFor(() => expect(screen.getByTestId('compression-summary')).toHaveTextContent('压缩版'))
+
+    await user.click(screen.getByRole('button', { name: '脚本内容' }))
+    await user.click(screen.getByRole('button', { name: '添加内容' }))
+    await user.type(screen.getByRole('textbox', { name: '新增规则' }), 'DOMAIN-SUFFIX,changed.example,DIRECT')
+
+    expect(screen.getByTestId('compression-summary')).not.toHaveTextContent('压缩版')
+    expect(screen.getByTestId('compression-summary')).not.toHaveTextContent('减少')
+  })
+
+  it('undoes a deleted generated content entry', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '脚本内容' }))
+    const deleteButton = screen.getByRole('button', { name: '删除规则 GEOSITE,google,谷歌服务' })
+    await user.click(deleteButton)
+    expect(screen.queryByRole('button', { name: '删除规则 GEOSITE,google,谷歌服务' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '撤销删除' }))
+    expect(screen.getByRole('button', { name: '删除规则 GEOSITE,google,谷歌服务' })).toBeVisible()
   })
 
   it('keeps invalid live JSON out of the preview and draft', async () => {
@@ -379,6 +458,8 @@ describe('App', () => {
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: '脚本内容' }))
+    await user.click(screen.getByRole('button', { name: '添加内容' }))
+    await user.click(screen.getByRole('button', { name: '规则提供者' }))
     const workspaceBeforeEdit = localStorage.getItem(generatorWorkspaceStorageKey)
     fireEvent.change(screen.getByRole('textbox', { name: '新增规则提供者 JSON' }), {
       target: { value: '{"broken":' },
@@ -386,6 +467,23 @@ describe('App', () => {
 
     expect(screen.getByTestId('script-preview')).not.toHaveTextContent('broken')
     expect(localStorage.getItem(generatorWorkspaceStorageKey)).toBe(workspaceBeforeEdit)
+  })
+
+  it('shows provider validation beside the invalid JSON input', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '脚本内容' }))
+    await user.click(screen.getByRole('button', { name: '添加内容' }))
+    await user.click(screen.getByRole('button', { name: '规则提供者' }))
+    const providerInput = screen.getByRole('textbox', { name: '新增规则提供者 JSON' })
+    fireEvent.change(providerInput, { target: { value: '{' } })
+    await user.click(screen.getByRole('button', { name: '添加规则提供者' }))
+
+    expect(providerInput).toHaveAttribute('aria-invalid', 'true')
+    expect(providerInput).toHaveAttribute('aria-describedby', 'content-add-error-ruleProvider')
+    expect(screen.getAllByText('规则提供者 JSON 结构无效')).toHaveLength(2)
+    expect(screen.getByRole('alert')).toHaveTextContent('规则提供者 JSON 结构无效')
   })
 
   it('uses a discoverable mobile configuration selector and keeps script commands in preview', async () => {
@@ -405,16 +503,19 @@ describe('App', () => {
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: '脚本内容' }))
+    await user.click(screen.getByRole('button', { name: '添加内容' }))
     await user.type(screen.getByRole('textbox', { name: '新增规则' }), 'DOMAIN-SUFFIX,custom.example,DIRECT')
     await user.click(screen.getByRole('button', { name: '添加脚本规则' }))
     expect(screen.getByTestId('script-preview')).toHaveTextContent('DOMAIN-SUFFIX,custom.example,DIRECT')
 
+    await user.click(screen.getByRole('button', { name: '规则提供者' }))
     fireEvent.change(screen.getByRole('textbox', { name: '新增规则提供者 JSON' }), {
       target: { value: '{"custom":{"type":"http","behavior":"domain","format":"text","interval":86400,"url":"https://example.com/rules.list","path":"./ruleset/custom.list"}}' },
     })
     await user.click(screen.getByRole('button', { name: '添加规则提供者' }))
     expect(screen.getByTestId('script-preview')).toHaveTextContent('custom.list')
 
+    await user.click(screen.getByRole('button', { name: '策略组' }))
     fireEvent.change(screen.getByRole('textbox', { name: '新增策略组 JSON' }), {
       target: { value: '{"name":"自定义策略","type":"select","proxies":["DIRECT"]}' },
     })

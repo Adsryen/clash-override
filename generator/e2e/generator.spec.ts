@@ -87,7 +87,8 @@ test('exports and imports a configuration file', async ({ page }) => {
   await appleToggle.uncheck()
 
   const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: '导出配置' }).click()
+  await page.getByRole('button', { name: '文件操作' }).click()
+  await page.getByRole('menuitem', { name: '导出配置' }).click()
   const download = await downloadPromise
   const configPath = await download.path()
 
@@ -154,13 +155,17 @@ test('summarizes default and changed built-in content without mobile overflow', 
   await page.getByRole('button', { name: '脚本内容' }).click()
   const search = page.getByRole('searchbox', { name: '搜索脚本内容' })
 
+  await page.getByRole('button', { name: '添加内容' }).click()
   await page.getByRole('textbox', { name: '新增规则', exact: true }).fill('DOMAIN-SUFFIX,summary-add.example,DIRECT')
   await page.getByRole('button', { name: '添加脚本规则' }).click()
   await page.getByRole('textbox', { name: '新增规则', exact: true }).fill('DOMAIN-SUFFIX,summary-remove.example,DIRECT')
   await page.getByRole('button', { name: '添加脚本规则' }).click()
+  await page.getByRole('button', { name: '浏览内容' }).click()
   await search.fill('summary-remove.example')
   await page.getByRole('button', { name: '删除规则 DOMAIN-SUFFIX,summary-remove.example,DIRECT' }).click()
 
+  await page.getByRole('button', { name: '添加内容' }).click()
+  await page.getByRole('button', { name: '规则提供者' }).click()
   await page.getByRole('textbox', { name: '新增规则提供者 JSON' }).fill(JSON.stringify({
     'summary-add-provider': {
       type: 'http',
@@ -180,14 +185,18 @@ test('summarizes default and changed built-in content without mobile overflow', 
     },
   }))
   await page.getByRole('button', { name: '添加规则提供者' }).click()
+  await page.getByRole('button', { name: '浏览内容' }).click()
   await search.fill('summary-remove-provider')
   await page.getByRole('button', { name: '删除提供者 summary-remove-provider' }).click()
 
+  await page.getByRole('button', { name: '添加内容' }).click()
+  await page.getByRole('button', { name: '策略组' }).click()
   await page.getByRole('textbox', { name: '新增策略组 JSON' }).fill(JSON.stringify([
     { name: 'summary-add-group', type: 'select', proxies: ['DIRECT'] },
     { name: 'summary-remove-group', type: 'select', proxies: ['DIRECT'] },
   ]))
   await page.getByRole('button', { name: '添加策略组' }).click()
+  await page.getByRole('button', { name: '浏览内容' }).click()
   await search.fill('summary-remove-group')
   await page.getByRole('button', { name: '删除策略组 summary-remove-group' }).click()
 
@@ -219,6 +228,7 @@ test('searches, removes, and adds generated script content', async ({ page }) =>
   await expect(page.getByRole('status')).toContainText('已删除脚本规则')
   await expect(page.getByRole('button', { name: '删除规则 GEOSITE,google,谷歌服务' })).toHaveCount(0)
 
+  await page.getByRole('button', { name: '添加内容' }).click()
   await page.getByRole('textbox', { name: '新增规则', exact: true }).fill('DOMAIN-SUFFIX,e2e.example,DIRECT')
   await page.getByRole('button', { name: '添加脚本规则' }).click()
   await expect(page.getByTestId('script-preview')).toContainText('DOMAIN-SUFFIX,e2e.example,DIRECT')
@@ -228,9 +238,11 @@ test('guides content additions with templates and shows mobile navigation choice
   await page.getByRole('button', { name: '脚本内容' }).click()
   await expect(page.getByText(/^匹配 \d+ 项$/)).toBeVisible()
 
+  await page.getByRole('button', { name: '添加内容' }).click()
   await page.getByRole('textbox', { name: '新增规则', exact: true }).fill('DOMAIN-SUFFIX,live-preview.example,DIRECT')
   await expect(page.getByTestId('script-preview')).toContainText('DOMAIN-SUFFIX,live-preview.example,DIRECT')
 
+  await page.getByRole('button', { name: '规则提供者' }).click()
   await page.getByRole('button', { name: '填入规则提供者模板' }).click()
   await expect(page.getByRole('textbox', { name: '新增规则提供者 JSON' })).toContainText('example-provider')
   await expect(page.getByTestId('script-preview')).toContainText('example-provider')

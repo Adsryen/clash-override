@@ -146,6 +146,69 @@ test('keeps the workbench usable without horizontal overflow on mobile', async (
   await expect(page.getByTestId('script-preview')).toBeVisible()
 })
 
+test('summarizes default and changed built-in content without mobile overflow', async ({ page }) => {
+  const preview = page.getByRole('complementary', { name: '脚本预览' })
+  await expect(preview.getByRole('heading', { name: '内容变更' })).toBeVisible()
+  await expect(preview.getByText('未修改内置脚本内容')).toBeVisible()
+
+  await page.getByRole('button', { name: '脚本内容' }).click()
+  const search = page.getByRole('searchbox', { name: '搜索脚本内容' })
+
+  await page.getByRole('textbox', { name: '新增规则', exact: true }).fill('DOMAIN-SUFFIX,summary-add.example,DIRECT')
+  await page.getByRole('button', { name: '添加脚本规则' }).click()
+  await page.getByRole('textbox', { name: '新增规则', exact: true }).fill('DOMAIN-SUFFIX,summary-remove.example,DIRECT')
+  await page.getByRole('button', { name: '添加脚本规则' }).click()
+  await search.fill('summary-remove.example')
+  await page.getByRole('button', { name: '删除规则 DOMAIN-SUFFIX,summary-remove.example,DIRECT' }).click()
+
+  await page.getByRole('textbox', { name: '新增规则提供者 JSON' }).fill(JSON.stringify({
+    'summary-add-provider': {
+      type: 'http',
+      behavior: 'domain',
+      format: 'text',
+      interval: 86400,
+      url: 'https://example.com/summary-add.list',
+      path: './ruleset/summary-add.list',
+    },
+    'summary-remove-provider': {
+      type: 'http',
+      behavior: 'domain',
+      format: 'text',
+      interval: 86400,
+      url: 'https://example.com/summary-remove.list',
+      path: './ruleset/summary-remove.list',
+    },
+  }))
+  await page.getByRole('button', { name: '添加规则提供者' }).click()
+  await search.fill('summary-remove-provider')
+  await page.getByRole('button', { name: '删除提供者 summary-remove-provider' }).click()
+
+  await page.getByRole('textbox', { name: '新增策略组 JSON' }).fill(JSON.stringify([
+    { name: 'summary-add-group', type: 'select', proxies: ['DIRECT'] },
+    { name: 'summary-remove-group', type: 'select', proxies: ['DIRECT'] },
+  ]))
+  await page.getByRole('button', { name: '添加策略组' }).click()
+  await search.fill('summary-remove-group')
+  await page.getByRole('button', { name: '删除策略组 summary-remove-group' }).click()
+
+  await expect(preview.getByRole('heading', { name: '规则', exact: true, level: 4 })).toBeVisible()
+  await expect(preview.getByRole('heading', { name: '规则提供者', level: 4 })).toBeVisible()
+  await expect(preview.getByRole('heading', { name: '策略组', level: 4 })).toBeVisible()
+  await expect(preview.getByText('新增 1 项', { exact: true })).toHaveCount(3)
+  await expect(preview.getByText('移除 1 项', { exact: true })).toHaveCount(3)
+
+  await preview.getByText('查看明细', { exact: true }).nth(0).click()
+  await expect(preview.getByText('DOMAIN-SUFFIX,summary-add.example,DIRECT', { exact: true })).toBeVisible()
+  await expect(preview.getByText('DOMAIN-SUFFIX,summary-remove.example,DIRECT', { exact: true })).toBeVisible()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  const metrics = await page.evaluate(() => ({
+    viewport: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }))
+  expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.viewport)
+})
+
 test('searches, removes, and adds generated script content', async ({ page }) => {
   await page.getByRole('button', { name: '脚本内容' }).click()
   await page.getByRole('searchbox', { name: '搜索脚本内容' }).fill('谷歌服务')

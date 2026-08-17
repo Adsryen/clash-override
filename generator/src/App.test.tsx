@@ -5,6 +5,7 @@ import App from './App'
 import { defaultGeneratorConfig } from './domain/config'
 import { serializeConfigFile } from './domain/config-file'
 import { renderScript } from './domain/script'
+import { generatorWorkspaceStorageKey } from './domain/storage'
 
 const createObjectUrl = vi.fn(() => 'blob:generated-script')
 const revokeObjectUrl = vi.fn()
@@ -264,6 +265,70 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: '收起脚本预览' })).toHaveAttribute('aria-expanded', 'true')
   })
 
+  it('shows that the preview uses the default built-in script content when no overrides exist', () => {
+    render(<App />)
+
+    expect(screen.getByRole('heading', { name: '内容变更' })).toBeVisible()
+    expect(screen.getByText('未修改内置脚本内容')).toBeVisible()
+    expect(screen.queryByText('新增 1 项')).not.toBeInTheDocument()
+    expect(screen.queryByText('移除 1 项')).not.toBeInTheDocument()
+  })
+
+  it('summarizes added and removed script content by category in the preview', async () => {
+    const draft = {
+      ...defaultGeneratorConfig,
+      contentOverrides: {
+        rules: {
+          add: ['DOMAIN-SUFFIX,added.example,DIRECT'],
+          remove: ['GEOSITE,removed,REJECT'],
+        },
+        ruleProviders: {
+          add: {
+            'added-provider': {
+              type: 'http' as const,
+              behavior: 'domain' as const,
+              format: 'text' as const,
+              interval: 86400,
+              url: 'https://example.com/added.list',
+              path: './ruleset/added.list',
+            },
+          },
+          remove: ['removed-provider'],
+        },
+        proxyGroups: {
+          add: [{ name: '新增策略组', type: 'select' as const, proxies: ['DIRECT'] }],
+          remove: ['移除策略组'],
+        },
+      },
+    }
+    localStorage.setItem(generatorWorkspaceStorageKey, JSON.stringify({
+      version: 1,
+      draft,
+      recentScript: null,
+      presets: [],
+    }))
+    const user = userEvent.setup()
+    render(<App />)
+
+    expect(screen.getByText('规则')).toBeVisible()
+    expect(screen.getByText('规则提供者')).toBeVisible()
+    expect(screen.getByText('策略组')).toBeVisible()
+    expect(screen.getAllByText('新增 1 项')).toHaveLength(3)
+    expect(screen.getAllByText('移除 1 项')).toHaveLength(3)
+
+    await user.click(screen.getAllByText('查看明细')[0])
+    expect(screen.getByText('DOMAIN-SUFFIX,added.example,DIRECT')).toBeVisible()
+    expect(screen.getByText('GEOSITE,removed,REJECT')).toBeVisible()
+
+    await user.click(screen.getAllByText('查看明细')[1])
+    expect(screen.getByText('added-provider')).toBeVisible()
+    expect(screen.getByText('removed-provider')).toBeVisible()
+
+    await user.click(screen.getAllByText('查看明细')[2])
+    expect(screen.getByText('新增策略组')).toBeVisible()
+    expect(screen.getByText('移除策略组')).toBeVisible()
+  })
+
   it('searches and removes generated script content', async () => {
     const user = userEvent.setup()
     render(<App />)
@@ -279,7 +344,7 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: '删除规则 GEOSITE,google,谷歌服务' }))
 
-    expect(screen.queryByText('GEOSITE,google,谷歌服务')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '删除规则 GEOSITE,google,谷歌服务' })).not.toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('已删除脚本规则')
   })
 
@@ -342,7 +407,7 @@ describe('App', () => {
     render(<App />)
     await user.click(screen.getByRole('button', { name: '脚本内容' }))
     expect(screen.getByText('DOMAIN-SUFFIX · custom.example')).toBeVisible()
-    expect(screen.getByText('自定义策略')).toBeVisible()
+    expect(screen.getByRole('button', { name: '删除策略组 自定义策略' })).toBeVisible()
   })
 
   it('downloads a compressed generated script', async () => {

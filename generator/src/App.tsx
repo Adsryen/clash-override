@@ -216,6 +216,12 @@ interface ContentEntry {
   value: string
 }
 
+interface ContentChangeSummary {
+  label: string
+  added: string[]
+  removed: string[]
+}
+
 const ruleProviderTemplate = JSON.stringify({
   'example-provider': {
     type: 'http',
@@ -281,6 +287,27 @@ function contentEntries(content: GeneratedContent): ContentEntry[] {
   ]
 }
 
+function contentChangeSummaries(config: GeneratorConfig): ContentChangeSummary[] {
+  const overrides = config.contentOverrides ?? defaultScriptContentOverrides
+  return [
+    {
+      label: '规则',
+      added: overrides.rules.add,
+      removed: overrides.rules.remove,
+    },
+    {
+      label: '规则提供者',
+      added: Object.keys(overrides.ruleProviders.add),
+      removed: overrides.ruleProviders.remove,
+    },
+    {
+      label: '策略组',
+      added: overrides.proxyGroups.add.map((group) => group.name),
+      removed: overrides.proxyGroups.remove,
+    },
+  ]
+}
+
 function App() {
   const [workspace, setWorkspace] = useState<GeneratorWorkspace>(() => loadWorkspace())
   const [presetName, setPresetName] = useState('')
@@ -302,6 +329,7 @@ function App() {
   } | null>(null)
   const script = useMemo(() => renderScript(workspace.draft), [workspace.draft])
   const generatedContent = useMemo(() => inspectGeneratedContent(workspace.draft), [workspace.draft])
+  const contentChanges = useMemo(() => contentChangeSummaries(workspace.draft), [workspace.draft])
   const filteredContent = useMemo(() => {
     const query = contentSearch.trim().toLocaleLowerCase()
     return contentEntries(generatedContent).filter((entry) => {
@@ -789,6 +817,7 @@ function App() {
             script={script}
             scriptSize={scriptSize}
             minifiedStats={minifiedStats}
+            contentChanges={contentChanges}
             onClose={() => setIsPreviewOpen(false)}
             onCopy={handleCopy}
             onDownload={handleDownload}
@@ -1119,6 +1148,7 @@ interface PreviewDrawerProps {
   script: string
   scriptSize: number
   minifiedStats: { size: number; reduction: number } | null
+  contentChanges: ContentChangeSummary[]
   onClose: () => void
   onCopy: () => void
   onDownload: () => void
@@ -1126,7 +1156,8 @@ interface PreviewDrawerProps {
   isMinifying: boolean
 }
 
-function PreviewDrawer({ script, scriptSize, minifiedStats, onClose, onCopy, onDownload, onDownloadMinified, isMinifying }: PreviewDrawerProps) {
+function PreviewDrawer({ script, scriptSize, minifiedStats, contentChanges, onClose, onCopy, onDownload, onDownloadMinified, isMinifying }: PreviewDrawerProps) {
+  const hasContentChanges = contentChanges.some(({ added, removed }) => added.length > 0 || removed.length > 0)
   return (
     <aside className="preview-panel" id="script-preview-drawer" aria-label="脚本预览" aria-modal="false">
       <div className="preview-header">
@@ -1135,6 +1166,31 @@ function PreviewDrawer({ script, scriptSize, minifiedStats, onClose, onCopy, onD
       </div>
       <div className="preview-actions"><button className="button secondary" type="button" onClick={onCopy}>复制预览脚本</button><button className="button secondary" type="button" onClick={onDownload}>下载预览脚本</button><button className="button secondary" type="button" disabled={isMinifying} onClick={onDownloadMinified}>{isMinifying ? '正在压缩...' : '下载预览压缩版'}</button></div>
       <div className="compression-summary" aria-label="脚本大小"><span>普通版 {formatBytes(scriptSize)}</span>{minifiedStats && <><span>压缩版 {formatBytes(minifiedStats.size)}</span><span>减少 {minifiedStats.reduction.toFixed(1)}%</span></>}</div>
+      <section className="content-change-summary" aria-labelledby="content-change-heading">
+        <h3 id="content-change-heading">内容变更</h3>
+        {!hasContentChanges ? (
+          <p>未修改内置脚本内容</p>
+        ) : (
+          <div className="content-change-list">
+            {contentChanges.map(({ label, added, removed }) => (
+              <article className="content-change-category" key={label}>
+                <h4>{label}</h4>
+                <div className="content-change-counts">
+                  <span>新增 {added.length} 项</span>
+                  <span>移除 {removed.length} 项</span>
+                </div>
+                <details>
+                  <summary>查看明细</summary>
+                  <div className="content-change-details">
+                    {added.length > 0 && <div><strong>新增</strong><ul>{added.map((item) => <li key={`add-${item}`}>{item}</li>)}</ul></div>}
+                    {removed.length > 0 && <div><strong>移除</strong><ul>{removed.map((item) => <li key={`remove-${item}`}>{item}</li>)}</ul></div>}
+                  </div>
+                </details>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
       <pre className="script-preview" data-testid="script-preview"><code>{script}</code></pre>
     </aside>
   )

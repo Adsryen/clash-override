@@ -348,7 +348,7 @@ describe('App', () => {
     expect(screen.getByRole('status')).toHaveTextContent('已删除脚本规则')
   })
 
-  it('shows compact content details and fills valid JSON templates without saving them', async () => {
+  it('previews content edits immediately while saving only after submission', async () => {
     const user = userEvent.setup()
     render(<App />)
 
@@ -356,16 +356,36 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: '删除规则 GEOSITE,google,谷歌服务' })).toHaveTextContent('删除')
     expect(screen.getAllByText('查看完整内容').length).toBeGreaterThan(0)
 
+    const workspaceBeforeEdit = localStorage.getItem(generatorWorkspaceStorageKey)
+    await user.type(screen.getByRole('textbox', { name: '新增规则' }), 'DOMAIN-SUFFIX,live.example,DIRECT')
+    expect(screen.getByTestId('script-preview')).toHaveTextContent('DOMAIN-SUFFIX,live.example,DIRECT')
+    expect(localStorage.getItem(generatorWorkspaceStorageKey)).toBe(workspaceBeforeEdit)
+
     await user.click(screen.getByRole('button', { name: '填入规则提供者模板' }))
     const providerInput = screen.getByRole('textbox', { name: '新增规则提供者 JSON' })
     expect(providerInput).toHaveDisplayValue(/example-provider/)
-    expect(screen.getByTestId('script-preview')).not.toHaveTextContent('example-provider')
+    expect(screen.getByTestId('script-preview')).toHaveTextContent('example-provider')
 
     await user.click(screen.getByRole('button', { name: '添加规则提供者' }))
     expect(screen.getByTestId('script-preview')).toHaveTextContent('example-provider')
 
     await user.click(screen.getByRole('button', { name: '填入策略组模板' }))
     expect(screen.getByRole('textbox', { name: '新增策略组 JSON' })).toHaveDisplayValue(/示例策略组/)
+    expect(screen.getByTestId('script-preview')).toHaveTextContent('示例策略组')
+  })
+
+  it('keeps invalid live JSON out of the preview and draft', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '脚本内容' }))
+    const workspaceBeforeEdit = localStorage.getItem(generatorWorkspaceStorageKey)
+    fireEvent.change(screen.getByRole('textbox', { name: '新增规则提供者 JSON' }), {
+      target: { value: '{"broken":' },
+    })
+
+    expect(screen.getByTestId('script-preview')).not.toHaveTextContent('broken')
+    expect(localStorage.getItem(generatorWorkspaceStorageKey)).toBe(workspaceBeforeEdit)
   })
 
   it('uses a discoverable mobile configuration selector and keeps script commands in preview', async () => {

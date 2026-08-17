@@ -228,13 +228,18 @@ test('guides content additions with templates and shows mobile navigation choice
   await page.getByRole('button', { name: '脚本内容' }).click()
   await expect(page.getByText(/^匹配 \d+ 项$/)).toBeVisible()
 
+  await page.getByRole('textbox', { name: '新增规则', exact: true }).fill('DOMAIN-SUFFIX,live-preview.example,DIRECT')
+  await expect(page.getByTestId('script-preview')).toContainText('DOMAIN-SUFFIX,live-preview.example,DIRECT')
+
   await page.getByRole('button', { name: '填入规则提供者模板' }).click()
   await expect(page.getByRole('textbox', { name: '新增规则提供者 JSON' })).toContainText('example-provider')
+  await expect(page.getByTestId('script-preview')).toContainText('example-provider')
 
   await page.setViewportSize({ width: 390, height: 844 })
   const sectionSelect = page.getByRole('combobox', { name: '切换配置分组' })
   await sectionSelect.selectOption('presets')
   await expect(page.getByRole('heading', { name: '本地预设' }).first()).toBeVisible()
+  await expect(page.getByTestId('script-preview')).toContainText('DOMAIN-SUFFIX,live-preview.example,DIRECT')
 
   const metrics = await page.evaluate(() => ({
     viewport: window.innerWidth,

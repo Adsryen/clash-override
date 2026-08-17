@@ -256,6 +256,68 @@ function cloneContentOverrides(config: GeneratorConfig) {
   }
 }
 
+function parseRuleProviderJson(value: string): Record<string, RuleProviderConfig> | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    return null
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
+  const entries = Object.entries(parsed)
+  if (entries.length === 0) return null
+  const providers: Record<string, RuleProviderConfig> = {}
+  for (const [name, provider] of entries) {
+    if (!isRuleProviderConfig(provider)) return null
+    providers[name] = provider
+  }
+  return providers
+}
+
+function parseProxyGroupJson(value: string): ProxyGroupConfig[] | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch {
+    return null
+  }
+  const groups = Array.isArray(parsed) ? parsed : [parsed]
+  if (groups.length === 0 || groups.some((group) => !isProxyGroupConfig(group))) return null
+  return groups
+}
+
+function createPreviewDraft(
+  draft: GeneratorConfig,
+  newRule: string,
+  providerJson: string,
+  proxyGroupJson: string,
+): GeneratorConfig {
+  const previewDraft = cloneGeneratorConfig(draft)
+  const overrides = cloneContentOverrides(previewDraft)
+  const rule = newRule.trim()
+  if (rule) {
+    overrides.rules.add = overrides.rules.add.filter((item) => item !== rule)
+    overrides.rules.add.push(rule)
+    overrides.rules.remove = overrides.rules.remove.filter((item) => item !== rule)
+  }
+  const providers = parseRuleProviderJson(providerJson)
+  if (providers) {
+    for (const [name, provider] of Object.entries(providers)) {
+      overrides.ruleProviders.add[name] = provider
+      overrides.ruleProviders.remove = overrides.ruleProviders.remove.filter((item) => item !== name)
+    }
+  }
+  const groups = parseProxyGroupJson(proxyGroupJson)
+  if (groups) {
+    const names = new Set(groups.map((group) => group.name))
+    overrides.proxyGroups.add = overrides.proxyGroups.add.filter((group) => !names.has(group.name))
+    overrides.proxyGroups.add.push(...groups)
+    overrides.proxyGroups.remove = overrides.proxyGroups.remove.filter((name) => !names.has(name))
+  }
+  previewDraft.contentOverrides = overrides
+  return previewDraft
+}
+
 function contentEntries(content: GeneratedContent): ContentEntry[] {
   return [
     ...content.rules.map((rule) => {
@@ -327,9 +389,13 @@ function App() {
     size: number
     reduction: number
   } | null>(null)
-  const script = useMemo(() => renderScript(workspace.draft), [workspace.draft])
+  const previewDraft = useMemo(
+    () => createPreviewDraft(workspace.draft, newContentRule, newRuleProviderJson, newProxyGroupJson),
+    [newContentRule, newProxyGroupJson, newRuleProviderJson, workspace.draft],
+  )
+  const script = useMemo(() => renderScript(previewDraft), [previewDraft])
   const generatedContent = useMemo(() => inspectGeneratedContent(workspace.draft), [workspace.draft])
-  const contentChanges = useMemo(() => contentChangeSummaries(workspace.draft), [workspace.draft])
+  const contentChanges = useMemo(() => contentChangeSummaries(previewDraft), [previewDraft])
   const filteredContent = useMemo(() => {
     const query = contentSearch.trim().toLocaleLowerCase()
     return contentEntries(generatedContent).filter((entry) => {
@@ -463,30 +529,12 @@ function App() {
   }
 
   const handleAddRuleProvider = () => {
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(newRuleProviderJson)
-    } catch {
-      setError('规则提供者必须是有效 JSON')
+    const validProviders = parseRuleProviderJson(newRuleProviderJson)
+    if (!validProviders) {
+      setError(newRuleProviderJson.trim().startsWith('{') ? '规则提供者 JSON 结构无效' : '规则提供者必须是有效 JSON')
       return
     }
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      setError('规则提供者 JSON 必须是名称到配置的对象')
-      return
-    }
-    const entries = Object.entries(parsed)
-    if (entries.length === 0) {
-      setError('规则提供者 JSON 结构无效')
-      return
-    }
-    const validProviders: Record<string, RuleProviderConfig> = {}
-    for (const [name, provider] of entries) {
-      if (!isRuleProviderConfig(provider)) {
-        setError('规则提供者 JSON 结构无效')
-        return
-      }
-      validProviders[name] = provider
-    }
+    const entries = Object.entries(validProviders)
     const overrides = cloneContentOverrides(workspace.draft)
     for (const [name, provider] of Object.entries(validProviders)) {
       overrides.ruleProviders.add[name] = provider
@@ -498,30 +546,9 @@ function App() {
   }
 
   const handleAddProxyGroup = () => {
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(newProxyGroupJson)
-    } catch {
-      setError('策略组必须是有效 JSON')
-      return
-    }
-    const parsedGroups: ProxyGroupConfig[] = []
-    if (Array.isArray(parsed)) {
-      for (const group of parsed) {
-        if (!isProxyGroupConfig(group)) {
-          setError('策略组 JSON 结构无效')
-          return
-        }
-        parsedGroups.push(group)
-      }
-    } else if (isProxyGroupConfig(parsed)) {
-      parsedGroups.push(parsed)
-    } else {
-      setError('策略组 JSON 结构无效')
-      return
-    }
-    if (parsedGroups.length === 0) {
-      setError('策略组 JSON 结构无效')
+    const parsedGroups = parseProxyGroupJson(newProxyGroupJson)
+    if (!parsedGroups) {
+      setError(newProxyGroupJson.trim().startsWith('{') || newProxyGroupJson.trim().startsWith('[') ? '策略组 JSON 结构无效' : '策略组必须是有效 JSON')
       return
     }
     const overrides = cloneContentOverrides(workspace.draft)

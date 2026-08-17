@@ -148,8 +148,8 @@ test('keeps the workbench usable without horizontal overflow on mobile', async (
 
 test('summarizes default and changed built-in content without mobile overflow', async ({ page }) => {
   const preview = page.getByRole('complementary', { name: '脚本预览' })
-  await expect(preview.getByRole('heading', { name: '内容变更' })).toBeVisible()
-  await expect(preview.getByText('未修改内置脚本内容')).toBeVisible()
+  await expect(preview.getByRole('heading', { name: '内容变更' })).toHaveCount(0)
+  await expect(preview.getByText('未修改内置脚本内容')).toHaveCount(0)
 
   await page.getByRole('button', { name: '脚本内容' }).click()
   const search = page.getByRole('searchbox', { name: '搜索脚本内容' })

@@ -1193,11 +1193,9 @@ function PreviewDrawer({ script, scriptSize, minifiedStats, contentChanges, onCl
       </div>
       <div className="preview-actions"><button className="button secondary" type="button" onClick={onCopy}>复制预览脚本</button><button className="button secondary" type="button" onClick={onDownload}>下载预览脚本</button><button className="button secondary" type="button" disabled={isMinifying} onClick={onDownloadMinified}>{isMinifying ? '正在压缩...' : '下载预览压缩版'}</button></div>
       <div className="compression-summary" aria-label="脚本大小"><span>普通版 {formatBytes(scriptSize)}</span>{minifiedStats && <><span>压缩版 {formatBytes(minifiedStats.size)}</span><span>减少 {minifiedStats.reduction.toFixed(1)}%</span></>}</div>
-      <section className="content-change-summary" aria-labelledby="content-change-heading">
-        <h3 id="content-change-heading">内容变更</h3>
-        {!hasContentChanges ? (
-          <p>未修改内置脚本内容</p>
-        ) : (
+      {hasContentChanges && (
+        <section className="content-change-summary" aria-labelledby="content-change-heading">
+          <h3 id="content-change-heading">内容变更</h3>
           <div className="content-change-list">
             {contentChanges.map(({ label, added, removed }) => (
               <article className="content-change-category" key={label}>
@@ -1216,8 +1214,8 @@ function PreviewDrawer({ script, scriptSize, minifiedStats, contentChanges, onCl
               </article>
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      )}
       <pre className="script-preview" data-testid="script-preview"><code>{script}</code></pre>
     </aside>
   )

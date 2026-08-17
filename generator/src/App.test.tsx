@@ -265,11 +265,11 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: '收起脚本预览' })).toHaveAttribute('aria-expanded', 'true')
   })
 
-  it('shows that the preview uses the default built-in script content when no overrides exist', () => {
+  it('hides the content change summary when no overrides exist', () => {
     render(<App />)
 
-    expect(screen.getByRole('heading', { name: '内容变更' })).toBeVisible()
-    expect(screen.getByText('未修改内置脚本内容')).toBeVisible()
+    expect(screen.queryByRole('heading', { name: '内容变更' })).not.toBeInTheDocument()
+    expect(screen.queryByText('未修改内置脚本内容')).not.toBeInTheDocument()
     expect(screen.queryByText('新增 1 项')).not.toBeInTheDocument()
     expect(screen.queryByText('移除 1 项')).not.toBeInTheDocument()
   })

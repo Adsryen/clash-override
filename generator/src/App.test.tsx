@@ -219,8 +219,8 @@ describe('App', () => {
       .mockResolvedValue(undefined)
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: '复制脚本' }))
-    await user.click(screen.getByRole('button', { name: '下载脚本' }))
+    await user.click(screen.getByRole('button', { name: '复制预览脚本' }))
+    await user.click(screen.getByRole('button', { name: '下载预览脚本' }))
 
     expect(clipboardWriteText).toHaveBeenCalledWith(
       expect.stringContaining('@clash-override-generator:'),
@@ -272,6 +272,8 @@ describe('App', () => {
     const search = screen.getByRole('searchbox', { name: '搜索脚本内容' })
     await user.type(search, '谷歌服务')
 
+    expect(screen.getByText(/^匹配 \d+ 项$/)).toBeVisible()
+    await user.click(screen.getAllByText('查看完整内容')[0])
     expect(screen.getAllByText('GEOSITE,google,谷歌服务')[0]).toBeVisible()
     expect(screen.queryByText('GEOSITE,apple-cn,苹果服务')).not.toBeInTheDocument()
 
@@ -279,6 +281,38 @@ describe('App', () => {
 
     expect(screen.queryByText('GEOSITE,google,谷歌服务')).not.toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('已删除脚本规则')
+  })
+
+  it('shows compact content details and fills valid JSON templates without saving them', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '脚本内容' }))
+    expect(screen.getByRole('button', { name: '删除规则 GEOSITE,google,谷歌服务' })).toHaveTextContent('删除')
+    expect(screen.getAllByText('查看完整内容').length).toBeGreaterThan(0)
+
+    await user.click(screen.getByRole('button', { name: '填入规则提供者模板' }))
+    const providerInput = screen.getByRole('textbox', { name: '新增规则提供者 JSON' })
+    expect(providerInput).toHaveDisplayValue(/example-provider/)
+    expect(screen.getByTestId('script-preview')).not.toHaveTextContent('example-provider')
+
+    await user.click(screen.getByRole('button', { name: '添加规则提供者' }))
+    expect(screen.getByTestId('script-preview')).toHaveTextContent('example-provider')
+
+    await user.click(screen.getByRole('button', { name: '填入策略组模板' }))
+    expect(screen.getByRole('textbox', { name: '新增策略组 JSON' })).toHaveDisplayValue(/示例策略组/)
+  })
+
+  it('uses a discoverable mobile configuration selector and keeps script commands in preview', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    expect(screen.queryByRole('button', { name: '复制脚本' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '复制预览脚本' })).toBeInTheDocument()
+
+    const sectionSelect = screen.getByRole('combobox', { name: '切换配置分组' })
+    await user.selectOptions(sectionSelect, 'content')
+    expect(screen.getAllByRole('heading', { name: '脚本内容' })[0]).toBeVisible()
   })
 
   it('adds a rule, provider, and proxy group with validation and persists them', async () => {
@@ -307,7 +341,7 @@ describe('App', () => {
     cleanup()
     render(<App />)
     await user.click(screen.getByRole('button', { name: '脚本内容' }))
-    expect(screen.getAllByText('DOMAIN-SUFFIX,custom.example,DIRECT')[0]).toBeVisible()
+    expect(screen.getByText('DOMAIN-SUFFIX · custom.example')).toBeVisible()
     expect(screen.getByText('自定义策略')).toBeVisible()
   })
 
@@ -315,7 +349,7 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: '下载压缩版' }))
+    await user.click(screen.getByRole('button', { name: '下载预览压缩版' }))
 
     await waitFor(() => expect(anchorClick).toHaveBeenCalledOnce())
     expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob))

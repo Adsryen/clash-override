@@ -48,7 +48,7 @@ test('restores the rule after a reload and downloads one script file', async ({ 
   await expect(page.getByTestId('script-preview')).toContainText('example.com')
 
   const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: '下载脚本' }).click()
+  await page.getByRole('button', { name: '下载预览脚本' }).click()
   const download = await downloadPromise
 
   expect(download.suggestedFilename()).toBe('global_script.js')
@@ -109,7 +109,7 @@ test('downloads a compressed script that can be imported again', async ({ page }
   await youtubeToggle.uncheck()
 
   const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: '下载压缩版' }).click()
+  await page.getByRole('button', { name: '下载预览压缩版' }).click()
   const download = await downloadPromise
   const minifiedScriptPath = await download.path()
 
@@ -135,7 +135,7 @@ test('keeps the workbench usable without horizontal overflow on mobile', async (
   await page.reload()
 
   await expect(page.getByRole('navigation', { name: '配置分组' })).toBeVisible()
-  await page.getByRole('button', { name: '站点分流' }).click()
+  await page.getByRole('combobox', { name: '切换配置分组' }).selectOption('sites')
 
   const metrics = await page.evaluate(() => ({
     viewport: window.innerWidth,
@@ -149,6 +149,7 @@ test('keeps the workbench usable without horizontal overflow on mobile', async (
 test('searches, removes, and adds generated script content', async ({ page }) => {
   await page.getByRole('button', { name: '脚本内容' }).click()
   await page.getByRole('searchbox', { name: '搜索脚本内容' }).fill('谷歌服务')
+  await page.getByText('查看完整内容').first().click()
   await expect(page.getByText('GEOSITE,google,谷歌服务').first()).toBeVisible()
 
   await page.getByRole('button', { name: '删除规则 GEOSITE,google,谷歌服务' }).click()
@@ -158,4 +159,23 @@ test('searches, removes, and adds generated script content', async ({ page }) =>
   await page.getByRole('textbox', { name: '新增规则', exact: true }).fill('DOMAIN-SUFFIX,e2e.example,DIRECT')
   await page.getByRole('button', { name: '添加脚本规则' }).click()
   await expect(page.getByTestId('script-preview')).toContainText('DOMAIN-SUFFIX,e2e.example,DIRECT')
+})
+
+test('guides content additions with templates and shows mobile navigation choices', async ({ page }) => {
+  await page.getByRole('button', { name: '脚本内容' }).click()
+  await expect(page.getByText(/^匹配 \d+ 项$/)).toBeVisible()
+
+  await page.getByRole('button', { name: '填入规则提供者模板' }).click()
+  await expect(page.getByRole('textbox', { name: '新增规则提供者 JSON' })).toContainText('example-provider')
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  const sectionSelect = page.getByRole('combobox', { name: '切换配置分组' })
+  await sectionSelect.selectOption('presets')
+  await expect(page.getByRole('heading', { name: '本地预设' }).first()).toBeVisible()
+
+  const metrics = await page.evaluate(() => ({
+    viewport: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }))
+  expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.viewport)
 })

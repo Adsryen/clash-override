@@ -309,7 +309,8 @@ legend {
 
 .content-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.35fr);
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.35fr) auto;
+  align-items: end;
   gap: 10px;
 }
 
@@ -331,32 +332,49 @@ legend {
   padding-right: 2px;
 }
 
+.content-result-count {
+  min-height: 36px;
+  padding: 9px 0;
+  color: #52655f;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .content-entry {
   min-width: 0;
   border: 1px solid #d2dcd5;
   border-radius: 5px;
-  padding: 10px;
+  padding: 9px 10px;
   background: #f8fbf9;
 }
 
 .content-entry-header {
   display: flex;
-  align-items: start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 
-.content-entry-header > div {
+.content-entry-title {
   display: grid;
   min-width: 0;
   gap: 3px;
 }
 
 .content-entry-header strong {
+  display: block;
   overflow-wrap: anywhere;
   color: #24413b;
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 13px;
+}
+
+.content-entry-summary {
+  overflow-wrap: anywhere;
+  color: #52655f;
+  font-size: 12px;
 }
 
 .content-entry-kind {
@@ -365,12 +383,24 @@ legend {
   font-weight: 700;
 }
 
+.content-entry-details {
+  margin-top: 7px;
+  border-top: 1px solid #e2e9e5;
+  padding-top: 7px;
+}
+
+.content-entry-details summary {
+  width: fit-content;
+  color: #0f5d50;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .content-entry-value {
   max-height: 130px;
   overflow: auto;
-  margin: 8px 0 0;
-  border-top: 1px solid #e2e9e5;
-  padding-top: 8px;
+  margin: 7px 0 0;
   color: #52655f;
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 11px;
@@ -389,6 +419,11 @@ legend {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: end;
   gap: 8px;
+}
+
+.content-adder-actions {
+  display: grid;
+  gap: 6px;
 }
 
 .content-adder textarea {
@@ -626,6 +661,10 @@ legend {
   gap: 3px;
 }
 
+.mobile-section-picker {
+  display: none;
+}
+
 .sidebar-item {
   display: grid;
   gap: 3px;
@@ -855,21 +894,25 @@ legend {
     padding: 0 0 10px;
   }
 
-  .sidebar-nav {
-    display: flex;
+  .mobile-section-picker {
+    display: grid;
     gap: 5px;
-    overflow-x: auto;
-    padding-bottom: 2px;
+    color: #52655f;
+    font-size: 12px;
+    font-weight: 700;
   }
 
-  .sidebar-item {
-    flex: 0 0 auto;
-    width: auto;
-    min-width: 108px;
-    padding: 8px;
+  .mobile-section-picker select {
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid #aabbb2;
+    border-radius: 5px;
+    padding: 7px 8px;
+    color: #21463e;
+    background: #fff;
   }
 
-  .sidebar-item small {
+  .sidebar-nav {
     display: none;
   }
 

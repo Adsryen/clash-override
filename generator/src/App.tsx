@@ -211,8 +211,27 @@ function isContentCategory(value: string): value is ContentCategory {
 interface ContentEntry {
   category: Exclude<ContentCategory, 'all'>
   label: string
+  title: string
+  summary: string
   value: string
 }
+
+const ruleProviderTemplate = JSON.stringify({
+  'example-provider': {
+    type: 'http',
+    behavior: 'domain',
+    format: 'text',
+    interval: 86400,
+    url: 'https://example.com/rules.list',
+    path: './ruleset/example-provider.list',
+  },
+}, null, 2)
+
+const proxyGroupTemplate = JSON.stringify({
+  name: '示例策略组',
+  type: 'select',
+  proxies: ['DIRECT'],
+}, null, 2)
 
 function cloneContentOverrides(config: GeneratorConfig) {
   const source = config.contentOverrides ?? defaultScriptContentOverrides
@@ -233,15 +252,30 @@ function cloneContentOverrides(config: GeneratorConfig) {
 
 function contentEntries(content: GeneratedContent): ContentEntry[] {
   return [
-    ...content.rules.map((rule) => ({ category: 'rules' as const, label: rule, value: rule })),
+    ...content.rules.map((rule) => {
+      const [kind, ...parts] = rule.split(',')
+      const target = parts.pop() ?? ''
+      const match = parts.join(',')
+      return {
+        category: 'rules' as const,
+        label: rule,
+        title: match ? `${kind} · ${match}` : kind,
+        summary: `目标：${target}`,
+        value: rule,
+      }
+    }),
     ...Object.entries(content.ruleProviders).map(([name, provider]) => ({
       category: 'ruleProviders' as const,
       label: name,
+      title: name,
+      summary: `${provider.type} · ${provider.behavior}/${provider.format}`,
       value: JSON.stringify(provider),
     })),
     ...content.proxyGroups.map((group) => ({
       category: 'proxyGroups' as const,
       label: group.name,
+      title: group.name,
+      summary: `${group.type} · ${group.proxies.length} 个代理`,
       value: JSON.stringify(group),
     })),
   ]
@@ -472,6 +506,18 @@ function App() {
     setNotice(`已添加 ${parsedGroups.length} 个策略组`)
   }
 
+  const handleFillProviderTemplate = () => {
+    setNewRuleProviderJson(ruleProviderTemplate)
+    setError(null)
+    setNotice('已填入规则提供者模板，请按需修改后添加')
+  }
+
+  const handleFillProxyGroupTemplate = () => {
+    setNewProxyGroupJson(proxyGroupTemplate)
+    setError(null)
+    setNotice('已填入策略组模板，请按需修改后添加')
+  }
+
   const handleConfigImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -632,6 +678,8 @@ function App() {
             onAddRule={handleAddContentRule}
             onAddProvider={handleAddRuleProvider}
             onAddProxyGroup={handleAddProxyGroup}
+            onFillProviderTemplate={handleFillProviderTemplate}
+            onFillProxyGroupTemplate={handleFillProxyGroupTemplate}
           />
         )
       case 'presets':
@@ -701,20 +749,6 @@ function App() {
               onChange={handleImport}
             />
           </label>
-          <button className="button secondary" type="button" onClick={handleCopy}>
-            复制脚本
-          </button>
-          <button className="button primary" type="button" onClick={handleDownload}>
-            下载脚本
-          </button>
-          <button
-            className="button secondary"
-            type="button"
-            disabled={isMinifying}
-            onClick={handleDownloadMinified}
-          >
-            {isMinifying ? '正在压缩...' : '下载压缩版'}
-          </button>
           <button
             className="button primary preview-toggle"
             type="button"
@@ -776,6 +810,18 @@ function WorkbenchSidebar({ activeSection, onChange }: WorkbenchSidebarProps) {
   return (
     <nav className="workbench-sidebar" aria-label="配置分组">
       <p className="sidebar-label">WORKSPACE</p>
+      <label className="mobile-section-picker">
+        <span>配置分组</span>
+        <select
+          aria-label="切换配置分组"
+          value={activeSection}
+          onChange={(event) => {
+            if (isWorkbenchSection(event.target.value)) onChange(event.target.value)
+          }}
+        >
+          {workbenchSections.map((section) => <option key={section.id} value={section.id}>{section.label}</option>)}
+        </select>
+      </label>
       <div className="sidebar-nav">
         {workbenchSections.map((section) => (
           <button
@@ -793,6 +839,10 @@ function WorkbenchSidebar({ activeSection, onChange }: WorkbenchSidebarProps) {
       </div>
     </nav>
   )
+}
+
+function isWorkbenchSection(value: string): value is WorkbenchSection {
+  return workbenchSections.some((section) => section.id === value)
 }
 
 interface OverviewSectionProps {
@@ -929,6 +979,8 @@ interface ScriptContentSectionProps {
   onAddRule: () => void
   onAddProvider: () => void
   onAddProxyGroup: () => void
+  onFillProviderTemplate: () => void
+  onFillProxyGroupTemplate: () => void
 }
 
 function ScriptContentSection({
@@ -947,6 +999,8 @@ function ScriptContentSection({
   onAddRule,
   onAddProvider,
   onAddProxyGroup,
+  onFillProviderTemplate,
+  onFillProxyGroupTemplate,
 }: ScriptContentSectionProps) {
   return (
     <section className="settings-section script-content" aria-labelledby="script-content-heading">
@@ -977,22 +1031,32 @@ function ScriptContentSection({
             <option value="proxyGroups">策略组</option>
           </select>
         </label>
+        <span className="content-result-count" aria-live="polite">匹配 {entries.length} 项</span>
       </div>
       <div className="content-list" aria-label="脚本内容条目">
         {entries.map((entry, index) => (
           <article className="content-entry" key={`${entry.category}:${entry.label}:${index}`}>
             <div className="content-entry-header">
-              <div>
+              <div className="content-entry-title">
                 <span className="content-entry-kind">
                   {entry.category === 'rules' ? '规则' : entry.category === 'ruleProviders' ? '规则提供者' : '策略组'}
                 </span>
-                <strong>{entry.label}</strong>
+                <strong>{entry.title}</strong>
+                <span className="content-entry-summary">{entry.summary}</span>
               </div>
-              <button className="button danger" type="button" onClick={() => onDelete(entry)}>
-                删除{entry.category === 'rules' ? '规则' : entry.category === 'ruleProviders' ? '提供者' : '策略组'} {entry.label}
+              <button
+                className="button danger content-delete"
+                type="button"
+                aria-label={`删除${entry.category === 'rules' ? '规则' : entry.category === 'ruleProviders' ? '提供者' : '策略组'} ${entry.label}`}
+                onClick={() => onDelete(entry)}
+              >
+                删除
               </button>
             </div>
-            <pre className="content-entry-value">{entry.value}</pre>
+            <details className="content-entry-details">
+              <summary>查看完整内容</summary>
+              <pre className="content-entry-value">{entry.value}</pre>
+            </details>
           </article>
         ))}
         {entries.length === 0 && <p className="empty-state">没有匹配的脚本内容。</p>}
@@ -1010,14 +1074,20 @@ function ScriptContentSection({
             <span>新增规则提供者 JSON</span>
             <textarea value={providerJson} onChange={(event) => onProviderJsonChange(event.target.value)} rows={5} />
           </label>
-          <button className="button secondary" type="button" onClick={onAddProvider}>添加规则提供者</button>
+          <div className="content-adder-actions">
+            <button className="button secondary" type="button" onClick={onFillProviderTemplate}>填入规则提供者模板</button>
+            <button className="button secondary" type="button" onClick={onAddProvider}>添加规则提供者</button>
+          </div>
         </div>
         <div className="content-adder">
           <label>
             <span>新增策略组 JSON</span>
             <textarea value={proxyGroupJson} onChange={(event) => onProxyGroupJsonChange(event.target.value)} rows={5} />
           </label>
-          <button className="button secondary" type="button" onClick={onAddProxyGroup}>添加策略组</button>
+          <div className="content-adder-actions">
+            <button className="button secondary" type="button" onClick={onFillProxyGroupTemplate}>填入策略组模板</button>
+            <button className="button secondary" type="button" onClick={onAddProxyGroup}>添加策略组</button>
+          </div>
         </div>
       </div>
     </section>

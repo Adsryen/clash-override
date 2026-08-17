@@ -1,4 +1,5 @@
 import {
+  cloneGeneratorConfig,
   defaultGeneratorConfig,
   isGeneratorConfig,
   type GeneratorConfig,
@@ -21,11 +22,7 @@ export interface GeneratorWorkspace {
 }
 
 function createDefaultConfig(): GeneratorConfig {
-  return {
-    ...defaultGeneratorConfig,
-    ruleOptions: { ...defaultGeneratorConfig.ruleOptions },
-    regionOptions: { ...defaultGeneratorConfig.regionOptions },
-  }
+  return cloneGeneratorConfig(defaultGeneratorConfig)
 }
 
 function createDefaultWorkspace(): GeneratorWorkspace {
@@ -114,9 +111,9 @@ export function savePreset(name: string, config: GeneratorConfig): GeneratorWork
   )
   const presets = existingPreset
     ? workspace.presets.map((preset) =>
-        preset.id === existingPreset.id ? { ...preset, config } : preset,
+        preset.id === existingPreset.id ? { ...preset, config: cloneGeneratorConfig(config) } : preset,
       )
-    : [...workspace.presets, { id: createPresetId(), name: normalizedName, config }]
+    : [...workspace.presets, { id: createPresetId(), name: normalizedName, config: cloneGeneratorConfig(config) }]
   const updatedWorkspace = { ...workspace, presets }
 
   saveWorkspace(updatedWorkspace)

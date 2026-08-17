@@ -448,6 +448,12 @@ const customRules = {
     ...(generatorConfig.customRules ?? {}),
 }
 
+const contentOverrides = generatorConfig.contentOverrides ?? {
+    rules: { remove: [], add: [] },
+    ruleProviders: { remove: [], add: {} },
+    proxyGroups: { remove: [], add: [] },
+}
+
 /**
  * 生成规则数组的函数 - 通用化处理
  */
@@ -495,6 +501,32 @@ function generateCustomRules() {
     })
 
     return rules
+}
+
+function applyContentOverrides(config) {
+    const ruleOverrides = contentOverrides.rules ?? { remove: [], add: [] }
+    const providerOverrides = contentOverrides.ruleProviders ?? { remove: [], add: {} }
+    const groupOverrides = contentOverrides.proxyGroups ?? { remove: [], add: [] }
+
+    const removedRules = new Set(ruleOverrides.remove ?? [])
+    config.rules = (config.rules ?? []).filter((rule) => !removedRules.has(rule))
+    config.rules.push(...(ruleOverrides.add ?? []))
+
+    const providers = { ...(config['rule-providers'] ?? {}) }
+    for (const name of providerOverrides.remove ?? []) {
+        delete providers[name]
+    }
+    Object.assign(providers, providerOverrides.add ?? {})
+    config['rule-providers'] = providers
+
+    const removedGroups = new Set(groupOverrides.remove ?? [])
+    const addedGroups = new Map()
+    for (const group of groupOverrides.add ?? []) {
+        addedGroups.set(group.name, group)
+    }
+    config['proxy-groups'] = (config['proxy-groups'] ?? [])
+        .filter((group) => !removedGroups.has(group.name) && !addedGroups.has(group.name))
+        .concat([...addedGroups.values()])
 }
 
 // 生成最终的规则数组
@@ -1185,10 +1217,11 @@ function main(config) {
         })
     }
 
+    applyContentOverrides(config)
+
     // 返回修改后的配置
     return config
 }
-
 
 
 

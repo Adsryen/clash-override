@@ -55,7 +55,6 @@ describe('App', () => {
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: '站点分流' }))
-    await user.click(screen.getByRole('button', { name: '打开脚本预览' }))
     const youtube = screen.getByRole('checkbox', { name: 'YouTube' })
     expect(youtube).toBeChecked()
 
@@ -159,7 +158,6 @@ describe('App', () => {
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: '自定义规则' }))
-    await user.click(screen.getByRole('button', { name: '打开脚本预览' }))
 
     await user.type(screen.getByRole('textbox', { name: '规则名称' }), 'gamingSites')
     await user.click(screen.getByRole('button', { name: '添加规则' }))
@@ -183,7 +181,6 @@ describe('App', () => {
     render(<App />)
 
     await user.click(screen.getByRole('button', { name: '自定义规则' }))
-    await user.click(screen.getByRole('button', { name: '打开脚本预览' }))
 
     await user.type(screen.getByRole('textbox', { name: '规则名称' }), 'russiaSites')
     await user.click(screen.getByRole('button', { name: '添加规则' }))
@@ -252,29 +249,72 @@ describe('App', () => {
     const user = userEvent.setup()
     render(<App />)
 
-    const openButton = screen.getByRole('button', { name: '打开脚本预览' })
-    expect(openButton).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByTestId('script-preview')).not.toBeInTheDocument()
-
-    await user.click(openButton)
-    expect(screen.getByRole('button', { name: '收起脚本预览' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    )
+    const openButton = screen.getByRole('button', { name: '收起脚本预览' })
+    expect(openButton).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByTestId('script-preview')).toBeVisible()
 
-    await user.click(screen.getByRole('button', { name: '收起脚本预览' }))
+    await user.click(openButton)
     expect(screen.getByRole('button', { name: '打开脚本预览' })).toHaveAttribute(
       'aria-expanded',
       'false',
     )
+    expect(screen.queryByTestId('script-preview')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '打开脚本预览' }))
+    expect(screen.getByRole('button', { name: '收起脚本预览' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('searches and removes generated script content', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '脚本内容' }))
+    const search = screen.getByRole('searchbox', { name: '搜索脚本内容' })
+    await user.type(search, '谷歌服务')
+
+    expect(screen.getAllByText('GEOSITE,google,谷歌服务')[0]).toBeVisible()
+    expect(screen.queryByText('GEOSITE,apple-cn,苹果服务')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '删除规则 GEOSITE,google,谷歌服务' }))
+
+    expect(screen.queryByText('GEOSITE,google,谷歌服务')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('已删除脚本规则')
+  })
+
+  it('adds a rule, provider, and proxy group with validation and persists them', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: '脚本内容' }))
+    await user.type(screen.getByRole('textbox', { name: '新增规则' }), 'DOMAIN-SUFFIX,custom.example,DIRECT')
+    await user.click(screen.getByRole('button', { name: '添加脚本规则' }))
+    expect(screen.getByTestId('script-preview')).toHaveTextContent('DOMAIN-SUFFIX,custom.example,DIRECT')
+
+    fireEvent.change(screen.getByRole('textbox', { name: '新增规则提供者 JSON' }), {
+      target: { value: '{"custom":{"type":"http","behavior":"domain","format":"text","interval":86400,"url":"https://example.com/rules.list","path":"./ruleset/custom.list"}}' },
+    })
+    await user.click(screen.getByRole('button', { name: '添加规则提供者' }))
+    expect(screen.getByTestId('script-preview')).toHaveTextContent('custom.list')
+
+    fireEvent.change(screen.getByRole('textbox', { name: '新增策略组 JSON' }), {
+      target: { value: '{"name":"自定义策略","type":"select","proxies":["DIRECT"]}' },
+    })
+    await user.click(screen.getByRole('button', { name: '添加策略组' }))
+    expect(screen.getByTestId('script-preview')).toHaveTextContent('自定义策略')
+
+    const firstRender = screen.getByRole('button', { name: '脚本内容' })
+    expect(firstRender).toBeVisible()
+    cleanup()
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: '脚本内容' }))
+    expect(screen.getAllByText('DOMAIN-SUFFIX,custom.example,DIRECT')[0]).toBeVisible()
+    expect(screen.getByText('自定义策略')).toBeVisible()
   })
 
   it('downloads a compressed generated script', async () => {
     const user = userEvent.setup()
     render(<App />)
 
-    await user.click(screen.getByRole('button', { name: '打开脚本预览' }))
     await user.click(screen.getByRole('button', { name: '下载压缩版' }))
 
     await waitFor(() => expect(anchorClick).toHaveBeenCalledOnce())

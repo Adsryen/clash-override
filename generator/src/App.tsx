@@ -1,13 +1,19 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import {
+  cloneGeneratorConfig,
   defaultGeneratorConfig,
+  defaultScriptContentOverrides,
+  isProxyGroupConfig,
+  isRuleProviderConfig,
   type CustomRule,
   type GeneratorConfig,
+  type ProxyGroupConfig,
+  type RuleProviderConfig,
   type RuleOptionKey,
 } from './domain/config'
 import { parseConfigFile, serializeConfigFile } from './domain/config-file'
 import { minifyGeneratedScript } from './domain/minify'
-import { parseGeneratedScript, renderScript } from './domain/script'
+import { inspectGeneratedContent, parseGeneratedScript, renderScript, type GeneratedContent } from './domain/script'
 import {
   deletePreset,
   loadWorkspace,
@@ -26,7 +32,7 @@ interface RuleOptionGroup {
   options: RuleOptionDefinition[]
 }
 
-type WorkbenchSection = 'overview' | 'runtime' | 'sites' | 'regions' | 'custom' | 'presets'
+type WorkbenchSection = 'overview' | 'runtime' | 'sites' | 'regions' | 'custom' | 'content' | 'presets'
 
 interface WorkbenchSectionDefinition {
   id: WorkbenchSection
@@ -40,6 +46,7 @@ const workbenchSections: WorkbenchSectionDefinition[] = [
   { id: 'sites', label: '站点分流', description: '选择需要覆写的服务和平台' },
   { id: 'regions', label: '地区节点', description: '配置地区站点和节点规则' },
   { id: 'custom', label: '自定义规则', description: '追加自己的域名和进程规则' },
+  { id: 'content', label: '脚本内容', description: '查看和编辑当前生成结果' },
   { id: 'presets', label: '本地预设', description: '保存和迁移本地配置' },
 ]
 
@@ -99,21 +106,7 @@ const ruleOptionGroups: RuleOptionGroup[] = [
 ]
 
 function cloneDefaultConfig(): GeneratorConfig {
-  return {
-    ...defaultGeneratorConfig,
-    ruleOptions: { ...defaultGeneratorConfig.ruleOptions },
-    regionOptions: { ...defaultGeneratorConfig.regionOptions },
-    customRules: Object.fromEntries(
-      Object.entries(defaultGeneratorConfig.customRules ?? {}).map(([name, rule]) => [name, {
-        ...rule,
-        domainSuffix: [...rule.domainSuffix],
-        domainKeyword: [...rule.domainKeyword],
-        domain: [...rule.domain],
-        processName: [...rule.processName],
-        ruleSets: [...rule.ruleSets],
-      }]),
-    ),
-  }
+  return cloneGeneratorConfig(defaultGeneratorConfig)
 }
 
 const customRuleListFields = [
@@ -209,6 +202,51 @@ function calculateReduction(originalBytes: number, compressedBytes: number): num
   return Math.max(0, ((originalBytes - compressedBytes) / originalBytes) * 100)
 }
 
+type ContentCategory = 'all' | 'rules' | 'ruleProviders' | 'proxyGroups'
+
+function isContentCategory(value: string): value is ContentCategory {
+  return value === 'all' || value === 'rules' || value === 'ruleProviders' || value === 'proxyGroups'
+}
+
+interface ContentEntry {
+  category: Exclude<ContentCategory, 'all'>
+  label: string
+  value: string
+}
+
+function cloneContentOverrides(config: GeneratorConfig) {
+  const source = config.contentOverrides ?? defaultScriptContentOverrides
+  return {
+    rules: { remove: [...source.rules.remove], add: [...source.rules.add] },
+    ruleProviders: {
+      remove: [...source.ruleProviders.remove],
+      add: Object.fromEntries(
+        Object.entries(source.ruleProviders.add).map(([name, provider]) => [name, { ...provider }]),
+      ),
+    },
+    proxyGroups: {
+      remove: [...source.proxyGroups.remove],
+      add: source.proxyGroups.add.map((group) => ({ ...group, proxies: [...group.proxies] })),
+    },
+  }
+}
+
+function contentEntries(content: GeneratedContent): ContentEntry[] {
+  return [
+    ...content.rules.map((rule) => ({ category: 'rules' as const, label: rule, value: rule })),
+    ...Object.entries(content.ruleProviders).map(([name, provider]) => ({
+      category: 'ruleProviders' as const,
+      label: name,
+      value: JSON.stringify(provider),
+    })),
+    ...content.proxyGroups.map((group) => ({
+      category: 'proxyGroups' as const,
+      label: group.name,
+      value: JSON.stringify(group),
+    })),
+  ]
+}
+
 function App() {
   const [workspace, setWorkspace] = useState<GeneratorWorkspace>(() => loadWorkspace())
   const [presetName, setPresetName] = useState('')
@@ -218,12 +256,29 @@ function App() {
   const [notice, setNotice] = useState<string | null>(null)
   const [isMinifying, setIsMinifying] = useState(false)
   const [activeSection, setActiveSection] = useState<WorkbenchSection>('overview')
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(true)
+  const [contentSearch, setContentSearch] = useState('')
+  const [contentCategory, setContentCategory] = useState<ContentCategory>('all')
+  const [newContentRule, setNewContentRule] = useState('')
+  const [newRuleProviderJson, setNewRuleProviderJson] = useState('')
+  const [newProxyGroupJson, setNewProxyGroupJson] = useState('')
   const [minifiedStats, setMinifiedStats] = useState<{
     size: number
     reduction: number
   } | null>(null)
   const script = useMemo(() => renderScript(workspace.draft), [workspace.draft])
+  const generatedContent = useMemo(() => inspectGeneratedContent(workspace.draft), [workspace.draft])
+  const filteredContent = useMemo(() => {
+    const query = contentSearch.trim().toLocaleLowerCase()
+    return contentEntries(generatedContent).filter((entry) => {
+      if (contentCategory !== 'all' && entry.category !== contentCategory) return false
+      if (!query) return true
+      const categoryLabel = entry.category === 'rules'
+        ? '规则'
+        : entry.category === 'ruleProviders' ? '规则提供者' : '策略组'
+      return `${categoryLabel} ${entry.label} ${entry.value}`.toLocaleLowerCase().includes(query)
+    })
+  }, [contentCategory, contentSearch, generatedContent])
   const scriptSize = useMemo(() => new Blob([script]).size, [script])
   const enabledRuleCount = useMemo(
     () => Object.values(workspace.draft.ruleOptions).filter(Boolean).length,
@@ -305,6 +360,116 @@ function App() {
     delete customRules[name]
     updateDraft({ ...workspace.draft, customRules })
     setNotice(`已删除规则 ${name}`)
+  }
+
+  const updateContentOverrides = (contentOverrides: GeneratorConfig['contentOverrides']) => {
+    updateDraft({ ...workspace.draft, contentOverrides })
+  }
+
+  const handleDeleteContent = (entry: ContentEntry) => {
+    const overrides = cloneContentOverrides(workspace.draft)
+    if (entry.category === 'rules') {
+      overrides.rules.add = overrides.rules.add.filter((rule) => rule !== entry.value)
+      if (!overrides.rules.remove.includes(entry.value)) overrides.rules.remove.push(entry.value)
+    } else if (entry.category === 'ruleProviders') {
+      delete overrides.ruleProviders.add[entry.label]
+      if (!overrides.ruleProviders.remove.includes(entry.label)) overrides.ruleProviders.remove.push(entry.label)
+    } else {
+      overrides.proxyGroups.add = overrides.proxyGroups.add.filter((group) => group.name !== entry.label)
+      if (!overrides.proxyGroups.remove.includes(entry.label)) overrides.proxyGroups.remove.push(entry.label)
+    }
+    updateContentOverrides(overrides)
+    setNotice(`已删除脚本${entry.category === 'rules' ? '规则' : entry.category === 'ruleProviders' ? '提供者' : '策略组'} ${entry.label}`)
+  }
+
+  const handleAddContentRule = () => {
+    const rule = newContentRule.trim()
+    if (!rule) {
+      setError('规则内容不能为空')
+      return
+    }
+    const overrides = cloneContentOverrides(workspace.draft)
+    if (overrides.rules.add.includes(rule)) {
+      setError('规则内容已存在')
+      return
+    }
+    overrides.rules.add.push(rule)
+    overrides.rules.remove = overrides.rules.remove.filter((item) => item !== rule)
+    updateContentOverrides(overrides)
+    setNewContentRule('')
+    setNotice(`已添加脚本规则 ${rule}`)
+  }
+
+  const handleAddRuleProvider = () => {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(newRuleProviderJson)
+    } catch {
+      setError('规则提供者必须是有效 JSON')
+      return
+    }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      setError('规则提供者 JSON 必须是名称到配置的对象')
+      return
+    }
+    const entries = Object.entries(parsed)
+    if (entries.length === 0) {
+      setError('规则提供者 JSON 结构无效')
+      return
+    }
+    const validProviders: Record<string, RuleProviderConfig> = {}
+    for (const [name, provider] of entries) {
+      if (!isRuleProviderConfig(provider)) {
+        setError('规则提供者 JSON 结构无效')
+        return
+      }
+      validProviders[name] = provider
+    }
+    const overrides = cloneContentOverrides(workspace.draft)
+    for (const [name, provider] of Object.entries(validProviders)) {
+      overrides.ruleProviders.add[name] = provider
+      overrides.ruleProviders.remove = overrides.ruleProviders.remove.filter((item) => item !== name)
+    }
+    updateContentOverrides(overrides)
+    setNewRuleProviderJson('')
+    setNotice(`已添加 ${entries.length} 个规则提供者`)
+  }
+
+  const handleAddProxyGroup = () => {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(newProxyGroupJson)
+    } catch {
+      setError('策略组必须是有效 JSON')
+      return
+    }
+    const parsedGroups: ProxyGroupConfig[] = []
+    if (Array.isArray(parsed)) {
+      for (const group of parsed) {
+        if (!isProxyGroupConfig(group)) {
+          setError('策略组 JSON 结构无效')
+          return
+        }
+        parsedGroups.push(group)
+      }
+    } else if (isProxyGroupConfig(parsed)) {
+      parsedGroups.push(parsed)
+    } else {
+      setError('策略组 JSON 结构无效')
+      return
+    }
+    if (parsedGroups.length === 0) {
+      setError('策略组 JSON 结构无效')
+      return
+    }
+    const overrides = cloneContentOverrides(workspace.draft)
+    const names = new Set(parsedGroups.map((group) => group.name))
+    overrides.proxyGroups.add = overrides.proxyGroups.add.filter((group) => !names.has(group.name))
+    overrides.proxyGroups.add.push(...parsedGroups)
+    overrides.proxyGroups.remove = overrides.proxyGroups.remove.filter((name) => !names.has(name))
+    updateContentOverrides(overrides)
+    setNewProxyGroupJson('')
+    setNotice(`已添加 ${parsedGroups.length} 个策略组`)
   }
 
   const handleConfigImport = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -447,6 +612,26 @@ function App() {
             onAdd={handleAddCustomRule}
             onChange={updateCustomRule}
             onDelete={handleDeleteCustomRule}
+          />
+        )
+      case 'content':
+        return (
+          <ScriptContentSection
+            entries={filteredContent}
+            search={contentSearch}
+            category={contentCategory}
+            newRule={newContentRule}
+            providerJson={newRuleProviderJson}
+            proxyGroupJson={newProxyGroupJson}
+            onSearchChange={setContentSearch}
+            onCategoryChange={setContentCategory}
+            onRuleChange={setNewContentRule}
+            onProviderJsonChange={setNewRuleProviderJson}
+            onProxyGroupJsonChange={setNewProxyGroupJson}
+            onDelete={handleDeleteContent}
+            onAddRule={handleAddContentRule}
+            onAddProvider={handleAddRuleProvider}
+            onAddProxyGroup={handleAddProxyGroup}
           />
         )
       case 'presets':
@@ -723,6 +908,117 @@ function CustomRulesSection({ draft, customRuleName, onCustomRuleNameChange, onA
       <div className="custom-rule-list">
         {Object.entries(draft.customRules ?? {}).map(([name, rule]) => <CustomRuleEditor key={name} name={name} rule={rule} onChange={(changes) => onChange(name, changes)} onDelete={() => onDelete(name)} />)}
         {Object.keys(draft.customRules ?? {}).length === 0 && <p className="empty-state">暂未添加自定义规则。</p>}
+      </div>
+    </section>
+  )
+}
+
+interface ScriptContentSectionProps {
+  entries: ContentEntry[]
+  search: string
+  category: ContentCategory
+  newRule: string
+  providerJson: string
+  proxyGroupJson: string
+  onSearchChange: (value: string) => void
+  onCategoryChange: (value: ContentCategory) => void
+  onRuleChange: (value: string) => void
+  onProviderJsonChange: (value: string) => void
+  onProxyGroupJsonChange: (value: string) => void
+  onDelete: (entry: ContentEntry) => void
+  onAddRule: () => void
+  onAddProvider: () => void
+  onAddProxyGroup: () => void
+}
+
+function ScriptContentSection({
+  entries,
+  search,
+  category,
+  newRule,
+  providerJson,
+  proxyGroupJson,
+  onSearchChange,
+  onCategoryChange,
+  onRuleChange,
+  onProviderJsonChange,
+  onProxyGroupJsonChange,
+  onDelete,
+  onAddRule,
+  onAddProvider,
+  onAddProxyGroup,
+}: ScriptContentSectionProps) {
+  return (
+    <section className="settings-section script-content" aria-labelledby="script-content-heading">
+      <div className="section-heading">
+        <div>
+          <h3 id="script-content-heading">脚本内容</h3>
+          <p>目录来自当前生成结果；编辑会同步保存到配置和脚本预览。</p>
+        </div>
+      </div>
+      <div className="content-toolbar">
+        <label>
+          <span>搜索脚本内容</span>
+          <input
+            type="search"
+            role="searchbox"
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+          />
+        </label>
+        <label>
+          <span>内容类别</span>
+          <select value={category} onChange={(event) => {
+            if (isContentCategory(event.target.value)) onCategoryChange(event.target.value)
+          }}>
+            <option value="all">全部</option>
+            <option value="rules">规则</option>
+            <option value="ruleProviders">规则提供者</option>
+            <option value="proxyGroups">策略组</option>
+          </select>
+        </label>
+      </div>
+      <div className="content-list" aria-label="脚本内容条目">
+        {entries.map((entry, index) => (
+          <article className="content-entry" key={`${entry.category}:${entry.label}:${index}`}>
+            <div className="content-entry-header">
+              <div>
+                <span className="content-entry-kind">
+                  {entry.category === 'rules' ? '规则' : entry.category === 'ruleProviders' ? '规则提供者' : '策略组'}
+                </span>
+                <strong>{entry.label}</strong>
+              </div>
+              <button className="button danger" type="button" onClick={() => onDelete(entry)}>
+                删除{entry.category === 'rules' ? '规则' : entry.category === 'ruleProviders' ? '提供者' : '策略组'} {entry.label}
+              </button>
+            </div>
+            <pre className="content-entry-value">{entry.value}</pre>
+          </article>
+        ))}
+        {entries.length === 0 && <p className="empty-state">没有匹配的脚本内容。</p>}
+      </div>
+      <div className="content-adders">
+        <div className="content-adder">
+          <label>
+            <span>新增规则</span>
+            <input value={newRule} onChange={(event) => onRuleChange(event.target.value)} />
+          </label>
+          <button className="button secondary" type="button" onClick={onAddRule}>添加脚本规则</button>
+        </div>
+        <div className="content-adder">
+          <label>
+            <span>新增规则提供者 JSON</span>
+            <textarea value={providerJson} onChange={(event) => onProviderJsonChange(event.target.value)} rows={5} />
+          </label>
+          <button className="button secondary" type="button" onClick={onAddProvider}>添加规则提供者</button>
+        </div>
+        <div className="content-adder">
+          <label>
+            <span>新增策略组 JSON</span>
+            <textarea value={proxyGroupJson} onChange={(event) => onProxyGroupJsonChange(event.target.value)} rows={5} />
+          </label>
+          <button className="button secondary" type="button" onClick={onAddProxyGroup}>添加策略组</button>
+        </div>
       </div>
     </section>
   )

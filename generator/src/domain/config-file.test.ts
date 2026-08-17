@@ -26,4 +26,10 @@ describe('config file', () => {
       ),
     ).toThrow('invalid configuration file')
   })
+
+  it('loads version one files created before content overrides existed', () => {
+    const { contentOverrides: _contentOverrides, ...legacyConfig } = defaultGeneratorConfig
+
+    expect(parseConfigFile(JSON.stringify({ version: 1, config: legacyConfig }))).toEqual(legacyConfig)
+  })
 })

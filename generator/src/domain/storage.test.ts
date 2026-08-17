@@ -74,4 +74,16 @@ describe('generator workspace storage', () => {
       presets: [],
     })
   })
+
+  it('loads a legacy workspace without content overrides', () => {
+    const { contentOverrides: _contentOverrides, ...legacyConfig } = defaultGeneratorConfig
+    localStorage.setItem(generatorWorkspaceStorageKey, JSON.stringify({
+      version: 1,
+      draft: legacyConfig,
+      recentScript: null,
+      presets: [],
+    }))
+
+    expect(loadWorkspace().draft).toEqual(legacyConfig)
+  })
 })

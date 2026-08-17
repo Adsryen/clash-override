@@ -10,7 +10,6 @@ test('loads the production build and edits a custom rule', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Clash Override' })).toBeVisible()
   await page.screenshot({ path: '../.github/screenshots/generator-desktop.png', fullPage: true })
   await page.getByRole('button', { name: '自定义规则' }).click()
-  await page.getByRole('button', { name: '打开脚本预览' }).click()
 
   await page.getByRole('textbox', { name: '规则名称' }).fill('russiaSites')
   await page.getByRole('button', { name: '添加规则' }).click()
@@ -25,7 +24,6 @@ test('loads the production build and edits a custom rule', async ({ page }) => {
 })
 
 test('keeps the script preview in a fixed scrollable area', async ({ page }) => {
-  await page.getByRole('button', { name: '打开脚本预览' }).click()
   const metrics = await page.getByTestId('script-preview').evaluate((element) => ({
     clientHeight: element.clientHeight,
     scrollHeight: element.scrollHeight,
@@ -47,7 +45,6 @@ test('restores the rule after a reload and downloads one script file', async ({ 
   await expect(page.getByRole('textbox', { name: '域名后缀 localSites' })).toHaveValue(
     'example.com',
   )
-  await page.getByRole('button', { name: '打开脚本预览' }).click()
   await expect(page.getByTestId('script-preview')).toContainText('example.com')
 
   const downloadPromise = page.waitForEvent('download')
@@ -59,7 +56,6 @@ test('restores the rule after a reload and downloads one script file', async ({ 
 
 test('imports a generated script and restores its custom rule', async ({ page }) => {
   await page.getByRole('button', { name: '自定义规则' }).click()
-  await page.getByRole('button', { name: '打开脚本预览' }).click()
   await page.getByRole('textbox', { name: '规则名称' }).fill('importedSites')
   await page.getByRole('button', { name: '添加规则' }).click()
   await page.getByRole('textbox', { name: '域名后缀 importedSites' }).fill('example.org')
@@ -140,7 +136,6 @@ test('keeps the workbench usable without horizontal overflow on mobile', async (
 
   await expect(page.getByRole('navigation', { name: '配置分组' })).toBeVisible()
   await page.getByRole('button', { name: '站点分流' }).click()
-  await page.getByRole('button', { name: '打开脚本预览' }).click()
 
   const metrics = await page.evaluate(() => ({
     viewport: window.innerWidth,
@@ -149,4 +144,18 @@ test('keeps the workbench usable without horizontal overflow on mobile', async (
   expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.viewport)
   await page.screenshot({ path: '../.github/screenshots/generator-mobile.png', fullPage: true })
   await expect(page.getByTestId('script-preview')).toBeVisible()
+})
+
+test('searches, removes, and adds generated script content', async ({ page }) => {
+  await page.getByRole('button', { name: '脚本内容' }).click()
+  await page.getByRole('searchbox', { name: '搜索脚本内容' }).fill('谷歌服务')
+  await expect(page.getByText('GEOSITE,google,谷歌服务').first()).toBeVisible()
+
+  await page.getByRole('button', { name: '删除规则 GEOSITE,google,谷歌服务' }).click()
+  await expect(page.getByRole('status')).toContainText('已删除脚本规则')
+  await expect(page.getByRole('button', { name: '删除规则 GEOSITE,google,谷歌服务' })).toHaveCount(0)
+
+  await page.getByRole('textbox', { name: '新增规则', exact: true }).fill('DOMAIN-SUFFIX,e2e.example,DIRECT')
+  await page.getByRole('button', { name: '添加脚本规则' }).click()
+  await expect(page.getByTestId('script-preview')).toContainText('DOMAIN-SUFFIX,e2e.example,DIRECT')
 })

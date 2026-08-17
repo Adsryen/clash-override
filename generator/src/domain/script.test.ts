@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   defaultGeneratorConfig,
+  inspectGeneratedContent,
   parseGeneratedScript,
   renderScript,
+  type GeneratorConfig,
 } from './script'
 import { minifyGeneratedScript } from './minify'
 
@@ -24,7 +26,7 @@ describe('generated scripts', () => {
   })
 
   it('merges user custom rules into the generated script', () => {
-    const config = {
+    const config: GeneratorConfig = {
       ...defaultGeneratorConfig,
       customRules: {
         gamingSites: {
@@ -50,6 +52,66 @@ describe('generated scripts', () => {
 
     expect(script).toContain('"gamingSites"')
     expect(result.rules).toContain('DOMAIN-SUFFIX,example.com,DIRECT')
+  })
+
+  it('applies content removals and additions to the generated output', () => {
+    const config: GeneratorConfig = {
+      ...defaultGeneratorConfig,
+      contentOverrides: {
+        rules: { remove: ['GEOSITE,google,谷歌服务'], add: ['DOMAIN-SUFFIX,example.com,DIRECT'] },
+        ruleProviders: {
+          remove: ['ai'],
+          add: {
+            example: {
+              type: 'http',
+              behavior: 'domain',
+              format: 'text',
+              interval: 86400,
+              url: 'https://example.com/rules.list',
+              path: './ruleset/example.list',
+            },
+          },
+        },
+        proxyGroups: {
+          remove: ['YouTube'],
+          add: [{ name: '示例策略', type: 'select', proxies: ['默认节点', 'DIRECT'] }],
+        },
+      },
+    }
+    const main = new Function(`${renderScript(config)}\nreturn main`)() as (
+      config: Record<string, unknown>,
+    ) => Record<string, unknown>
+    const result = main({ proxies: [{ name: 'Hong Kong 01' }], 'proxy-groups': [], rules: [] })
+
+    expect(result.rules).not.toContain('GEOSITE,google,谷歌服务')
+    expect(result.rules).toContain('DOMAIN-SUFFIX,example.com,DIRECT')
+    expect(result['rule-providers']).toMatchObject({
+      example: { url: 'https://example.com/rules.list' },
+    })
+    expect(result['proxy-groups']).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: '示例策略' }),
+    ]))
+    expect(result['proxy-groups']).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'YouTube' }),
+    ]))
+  })
+
+  it('inspects the content generated for the current configuration', () => {
+    const content = inspectGeneratedContent(defaultGeneratorConfig)
+
+    expect(content.rules).toContain('MATCH,其他外网')
+    expect(content.ruleProviders).toHaveProperty('applications')
+    expect(content.proxyGroups).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: '默认节点' }),
+    ]))
+  })
+
+  it('returns empty generated content when the master switch is disabled', () => {
+    const content = inspectGeneratedContent({ ...defaultGeneratorConfig, enable: false })
+
+    expect(content.rules).toEqual([])
+    expect(content.ruleProviders).toEqual({})
+    expect(content.proxyGroups).toEqual([])
   })
 
   it('rejects scripts that were not created by the generator', () => {

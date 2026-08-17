@@ -17,7 +17,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -29,7 +30,8 @@ select {
 
 button:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
   outline: 3px solid #e6b654;
   outline-offset: 2px;
 }
@@ -270,7 +272,11 @@ legend {
 .custom-rule-adder input,
 .custom-rule-target input,
 .custom-rule-target-select select,
-.custom-rule-fields textarea {
+.custom-rule-fields textarea,
+.content-toolbar input,
+.content-toolbar select,
+.content-adder input,
+.content-adder textarea {
   width: 100%;
   border: 1px solid #b4c2ba;
   border-radius: 4px;
@@ -292,6 +298,101 @@ legend {
 
 .custom-rule-fields textarea {
   min-height: 74px;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.script-content {
+  display: grid;
+  gap: 14px;
+}
+
+.content-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.35fr);
+  gap: 10px;
+}
+
+.content-toolbar label,
+.content-adder label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  color: #52655f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.content-list {
+  display: grid;
+  max-height: 390px;
+  gap: 8px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.content-entry {
+  min-width: 0;
+  border: 1px solid #d2dcd5;
+  border-radius: 5px;
+  padding: 10px;
+  background: #f8fbf9;
+}
+
+.content-entry-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.content-entry-header > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.content-entry-header strong {
+  overflow-wrap: anywhere;
+  color: #24413b;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 13px;
+}
+
+.content-entry-kind {
+  color: #63746e;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.content-entry-value {
+  max-height: 130px;
+  overflow: auto;
+  margin: 8px 0 0;
+  border-top: 1px solid #e2e9e5;
+  padding-top: 8px;
+  color: #52655f;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.content-adders {
+  display: grid;
+  gap: 10px;
+}
+
+.content-adder {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.content-adder textarea {
+  min-height: 94px;
   resize: vertical;
   line-height: 1.4;
 }
@@ -443,7 +544,9 @@ legend {
   }
 
   .custom-rule-adder,
-  .custom-rule-fields {
+  .custom-rule-fields,
+  .content-toolbar,
+  .content-adder {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -456,12 +559,21 @@ legend {
     width: 100%;
   }
 
+  .content-adder .button {
+    width: 100%;
+  }
+
   .custom-rule-fields {
     display: grid;
   }
 
   .custom-rule-card-header {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .content-entry-header {
+    align-items: stretch;
     flex-direction: column;
   }
 

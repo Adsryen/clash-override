@@ -332,7 +332,7 @@ function detectCountryCode(name) {
 // 自定义规则集配置 - 统一管理 RULE-SET 和对应的 rule-providers
 // 添加新的规则集时，只需要在这里配置一次即可
 //
-const customRuleSets = {
+const defaultCustomRuleSets = {
     // 下载软件应用规则集
     applications: {
         behavior: 'classical',
@@ -348,6 +348,15 @@ const customRuleSets = {
     //     url: 'https://example.com/gaming.list',
     //     path: './ruleset/custom/gaming.list',
     // }
+}
+
+const customRuleSets = {
+    ...defaultCustomRuleSets,
+    ...(generatorConfig.customRuleSets ?? {}),
+}
+
+for (const name of generatorConfig.removedBuiltInRuleSets ?? []) {
+    delete customRuleSets[name]
 }
 
 /**
@@ -446,6 +455,10 @@ const defaultCustomRules = {
 const customRules = {
     ...defaultCustomRules,
     ...(generatorConfig.customRules ?? {}),
+}
+
+for (const name of generatorConfig.removedBuiltInRules ?? []) {
+    delete customRules[name]
 }
 
 const contentOverrides = generatorConfig.contentOverrides ?? {
@@ -1222,7 +1235,6 @@ function main(config) {
     // 返回修改后的配置
     return config
 }
-
 
 
 

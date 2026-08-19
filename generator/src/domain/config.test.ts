@@ -28,13 +28,11 @@ describe('generator configuration custom rules', () => {
     expect(isGeneratorConfig({ ...defaultGeneratorConfig, customRules: customRule })).toBe(true)
   })
 
-  it('rejects reserved names and incomplete custom rule fields', () => {
-    expect(
-      isGeneratorConfig({
-        ...defaultGeneratorConfig,
-        customRules: { direct: customRule.gamingSites },
-      }),
-    ).toBe(false)
+  it('accepts built-in rule overrides and rejects incomplete custom rule fields', () => {
+    expect(isGeneratorConfig({
+      ...defaultGeneratorConfig,
+      customRules: { direct: customRule.gamingSites },
+    })).toBe(true)
     expect(
       isGeneratorConfig({
         ...defaultGeneratorConfig,
@@ -80,5 +78,34 @@ describe('generator configuration custom rules', () => {
     })).toBe(false)
     expect(isProxyGroupConfig({ name: '', type: 'select', proxies: [] })).toBe(false)
     expect(isProxyGroupConfig({ name: '示例策略', type: 'script', proxies: [] })).toBe(false)
+  })
+
+  it('accepts source rule overrides and preserves independent clones', () => {
+    const config = {
+      ...defaultGeneratorConfig,
+      customRules: {
+        direct: { ...customRule.gamingSites, target: '修改后的直连' },
+      },
+      removedBuiltInRules: ['downloadApps'],
+      customRuleSets: {
+        applications: {
+          behavior: 'domain' as const,
+          format: 'mrs' as const,
+          interval: 43200,
+          url: 'https://example.com/applications.mrs',
+          path: './ruleset/applications.mrs',
+        },
+        gaming: {
+          behavior: 'classical' as const,
+          format: 'text' as const,
+          interval: 86400,
+          url: 'https://example.com/gaming.list',
+          path: './ruleset/gaming.list',
+        },
+      },
+      removedBuiltInRuleSets: ['applications'],
+    }
+
+    expect(isGeneratorConfig(config)).toBe(true)
   })
 })

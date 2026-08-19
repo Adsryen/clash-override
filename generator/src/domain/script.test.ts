@@ -54,6 +54,51 @@ describe('generated scripts', () => {
     expect(result.rules).toContain('DOMAIN-SUFFIX,example.com,DIRECT')
   })
 
+  it('applies built-in rule changes, removals, and source rule sets', () => {
+    const config: GeneratorConfig = {
+      ...defaultGeneratorConfig,
+      customRules: {
+        direct: {
+          target: '自定义直连',
+          domainSuffix: ['direct.example'],
+          domainKeyword: [],
+          domain: [],
+          processName: [],
+          ruleSets: [],
+        },
+        gamingSites: {
+          target: '游戏专用',
+          domainSuffix: [],
+          domainKeyword: [],
+          domain: [],
+          processName: [],
+          ruleSets: ['gaming'],
+        },
+      },
+      removedBuiltInRules: ['downloadApps'],
+      customRuleSets: {
+        gaming: {
+          behavior: 'classical',
+          format: 'text',
+          interval: 86400,
+          url: 'https://example.com/gaming.list',
+          path: './ruleset/gaming.list',
+        },
+      },
+      removedBuiltInRuleSets: ['applications'],
+    }
+
+    const result = inspectGeneratedContent(config)
+
+    expect(result.rules).toContain('DOMAIN-SUFFIX,direct.example,自定义直连')
+    expect(result.rules).toContain('RULE-SET,gaming,游戏专用')
+    expect(result.rules).not.toContain('RULE-SET,applications,下载软件')
+    expect(result.ruleProviders).toMatchObject({
+      gaming: { url: 'https://example.com/gaming.list' },
+    })
+    expect(result.ruleProviders).not.toHaveProperty('applications')
+  })
+
   it('applies content removals and additions to the generated output', () => {
     const config: GeneratorConfig = {
       ...defaultGeneratorConfig,

@@ -41,6 +41,77 @@ export interface CustomRule {
 
 export type CustomRules = Record<string, CustomRule>
 
+export const builtInCustomRules: CustomRules = {
+  direct: {
+    target: 'DIRECT',
+    domainSuffix: ['warframe.com', 'prlrr.com', 'g5air.com', 'qslk.net', 'darensoft.com', 'gzankun.com'],
+    domainKeyword: ['audiences', 'rlzy', 'rsxt', 'g5air'],
+    domain: ['h1.gzankun.com'],
+    processName: ['SunloginClient', 'SunloginClient.exe', 'AnyDesk', 'AnyDesk.exe', 'BaoMiHua.exe'],
+    ruleSets: [],
+  },
+  defaultProxy: {
+    target: '默认节点',
+    domainSuffix: ['augmentcode.com', 'javdb.com', 'jdbstatic.com'],
+    domainKeyword: ['postman', 'stripchat', 'qbittorrent'],
+    domain: [],
+    processName: ['Windsurf.exe'],
+    ruleSets: [],
+  },
+  downloadApps: {
+    target: '下载软件',
+    domainSuffix: [],
+    domainKeyword: [],
+    domain: [],
+    processName: [],
+    ruleSets: ['applications'],
+  },
+  japanSites: {
+    target: '日本网站',
+    domainSuffix: ['mgstage.com', 'dmm.co.jp'],
+    domainKeyword: ['dmm.com', 'seesaawiki', 'mgstage'],
+    domain: ['dmm.co.jp'],
+    processName: [],
+    ruleSets: [],
+  },
+  hkSites: {
+    target: '香港网站',
+    domainSuffix: ['fc2ppvdb.com'],
+    domainKeyword: [],
+    domain: [],
+    processName: [],
+    ruleSets: [],
+  },
+  usSites: {
+    target: '美国网站',
+    domainSuffix: [],
+    domainKeyword: [],
+    domain: [],
+    processName: [],
+    ruleSets: [],
+  },
+}
+
+export interface RuleSetConfig {
+  behavior: 'classical' | 'domain' | 'ipcidr'
+  format: 'mrs' | 'text' | 'yaml'
+  interval: number
+  url: string
+  path: string
+}
+
+export type CustomRuleSets = Record<string, RuleSetConfig>
+
+export const builtInRuleSets: CustomRuleSets = {
+  applications: {
+    behavior: 'classical',
+    format: 'text',
+    interval: 86400,
+    url: 'https://fastly.jsdelivr.net/gh/DustinWin/ruleset_geodata@clash-ruleset/applications.list',
+    path: './ruleset/DustinWin/applications.list',
+  },
+}
+
 export interface RuleProviderConfig {
   type: 'http'
   behavior: 'classical' | 'domain' | 'ipcidr'
@@ -82,6 +153,9 @@ export interface GeneratorConfig {
   enableDnsOverride: boolean
   ruleOptions: Record<RuleOptionKey, boolean>
   customRules?: CustomRules
+  removedBuiltInRules?: string[]
+  customRuleSets?: CustomRuleSets
+  removedBuiltInRuleSets?: string[]
   contentOverrides?: ScriptContentOverrides
   regionOptions: {
     autoDetect: boolean
@@ -94,6 +168,9 @@ export const defaultGeneratorConfig: GeneratorConfig = {
   enableUrltest: false,
   enableDnsOverride: false,
   customRules: {},
+  removedBuiltInRules: [],
+  customRuleSets: {},
+  removedBuiltInRuleSets: [],
   contentOverrides: defaultScriptContentOverrides,
   ruleOptions: {
     apple: true,
@@ -137,15 +214,6 @@ const baseConfigurationKeys = [
   'ruleOptions',
   'regionOptions',
 ] as const
-
-const reservedCustomRuleNames = new Set([
-  'direct',
-  'defaultProxy',
-  'downloadApps',
-  'japanSites',
-  'hkSites',
-  'usSites',
-])
 
 const customRuleNamePattern = /^[A-Za-z][A-Za-z0-9-]*$/
 const customRuleFields = [
@@ -200,6 +268,22 @@ export function isRuleProviderConfig(value: unknown): value is RuleProviderConfi
     isRecord(value) &&
     hasExactKeys(value, ruleProviderKeys) &&
     value.type === 'http' &&
+    (value.behavior === 'classical' || value.behavior === 'domain' || value.behavior === 'ipcidr') &&
+    (value.format === 'mrs' || value.format === 'text' || value.format === 'yaml') &&
+    typeof value.interval === 'number' &&
+    Number.isFinite(value.interval) &&
+    value.interval > 0 &&
+    typeof value.url === 'string' &&
+    value.url.trim().length > 0 &&
+    typeof value.path === 'string' &&
+    value.path.trim().length > 0
+  )
+}
+
+export function isRuleSetConfig(value: unknown): value is RuleSetConfig {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, ruleProviderKeys.slice(1)) &&
     (value.behavior === 'classical' || value.behavior === 'domain' || value.behavior === 'ipcidr') &&
     (value.format === 'mrs' || value.format === 'text' || value.format === 'yaml') &&
     typeof value.interval === 'number' &&
@@ -279,8 +363,16 @@ function isCustomRules(value: unknown): value is CustomRules {
     Object.entries(value).every(
       ([name, rule]) =>
         customRuleNamePattern.test(name) &&
-        !reservedCustomRuleNames.has(name) &&
         isCustomRule(rule),
+    )
+  )
+}
+
+function isCustomRuleSets(value: unknown): value is CustomRuleSets {
+  return (
+    isRecord(value) &&
+    Object.entries(value).every(
+      ([name, ruleSet]) => customRuleNamePattern.test(name) && isRuleSetConfig(ruleSet),
     )
   )
 }
@@ -293,6 +385,9 @@ export function isGeneratorConfig(value: unknown): value is GeneratorConfig {
   const configurationKeys = [
     ...baseConfigurationKeys,
     ...(value.customRules === undefined ? [] : ['customRules']),
+    ...(value.removedBuiltInRules === undefined ? [] : ['removedBuiltInRules']),
+    ...(value.customRuleSets === undefined ? [] : ['customRuleSets']),
+    ...(value.removedBuiltInRuleSets === undefined ? [] : ['removedBuiltInRuleSets']),
     ...(value.contentOverrides === undefined ? [] : ['contentOverrides']),
   ]
 
@@ -316,6 +411,18 @@ export function isGeneratorConfig(value: unknown): value is GeneratorConfig {
   }
 
   if (value.customRules !== undefined && !isCustomRules(value.customRules)) {
+    return false
+  }
+
+  if (value.removedBuiltInRules !== undefined && !isStringArray(value.removedBuiltInRules)) {
+    return false
+  }
+
+  if (value.customRuleSets !== undefined && !isCustomRuleSets(value.customRuleSets)) {
+    return false
+  }
+
+  if (value.removedBuiltInRuleSets !== undefined && !isStringArray(value.removedBuiltInRuleSets)) {
     return false
   }
 
@@ -345,6 +452,11 @@ export function cloneGeneratorConfig(config: GeneratorConfig): GeneratorConfig {
         ruleSets: [...rule.ruleSets],
       }]),
     ),
+    removedBuiltInRules: [...(config.removedBuiltInRules ?? [])],
+    customRuleSets: Object.fromEntries(
+      Object.entries(config.customRuleSets ?? {}).map(([name, ruleSet]) => [name, { ...ruleSet }]),
+    ),
+    removedBuiltInRuleSets: [...(config.removedBuiltInRuleSets ?? [])],
     contentOverrides: {
       rules: {
         remove: [...contentOverrides.rules.remove],

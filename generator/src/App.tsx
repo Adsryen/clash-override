@@ -1,19 +1,19 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import {
   cloneGeneratorConfig,
+  builtInCustomRules,
+  builtInRuleSets,
   defaultGeneratorConfig,
-  defaultScriptContentOverrides,
-  isProxyGroupConfig,
-  isRuleProviderConfig,
   type CustomRule,
+  type CustomRules,
+  type CustomRuleSets,
   type GeneratorConfig,
-  type ProxyGroupConfig,
-  type RuleProviderConfig,
+  type RuleSetConfig,
   type RuleOptionKey,
 } from './domain/config'
 import { parseConfigFile, serializeConfigFile } from './domain/config-file'
 import { minifyGeneratedScript } from './domain/minify'
-import { inspectGeneratedContent, parseGeneratedScript, renderScript, type GeneratedContent } from './domain/script'
+import { parseGeneratedScript, renderScript } from './domain/script'
 import {
   deletePreset,
   loadWorkspace,
@@ -32,7 +32,7 @@ interface RuleOptionGroup {
   options: RuleOptionDefinition[]
 }
 
-type WorkbenchSection = 'overview' | 'runtime' | 'sites' | 'regions' | 'custom' | 'content' | 'presets'
+type WorkbenchSection = 'overview' | 'runtime' | 'sites' | 'regions' | 'rules' | 'ruleSets' | 'presets'
 
 interface WorkbenchSectionDefinition {
   id: WorkbenchSection
@@ -41,13 +41,13 @@ interface WorkbenchSectionDefinition {
 }
 
 const workbenchSections: WorkbenchSectionDefinition[] = [
-  { id: 'overview', label: '概览', description: '查看配置摘要和生成状态' },
-  { id: 'runtime', label: '运行方式', description: '控制覆写、测速和节点筛选' },
-  { id: 'sites', label: '站点分流', description: '选择需要覆写的服务和平台' },
-  { id: 'regions', label: '地区节点', description: '配置地区站点和节点规则' },
-  { id: 'custom', label: '自定义规则', description: '追加自己的域名和进程规则' },
-  { id: 'content', label: '脚本内容', description: '查看和编辑当前生成结果' },
-  { id: 'presets', label: '本地预设', description: '保存和迁移本地配置' },
+  { id: 'overview', label: '概览', description: '查看当前开关、规则数量和脚本大小' },
+  { id: 'runtime', label: '运行方式', description: '控制脚本开关、自动测速和 DNS 覆写' },
+  { id: 'sites', label: '站点分流', description: '按服务开关生成对应的代理策略组' },
+  { id: 'regions', label: '地区偏好', description: '选择地区站点，并决定如何识别订阅节点' },
+  { id: 'rules', label: '规则', description: '设置域名、关键词、进程等匹配条件，以及命中后的目标策略' },
+  { id: 'ruleSets', label: '规则集', description: '配置外部规则列表的地址和更新方式，再在规则中引用' },
+  { id: 'presets', label: '本地预设', description: '保存当前配置，之后可以快速加载或删除' },
 ]
 
 const ruleOptionGroups: RuleOptionGroup[] = [
@@ -105,6 +105,20 @@ const ruleOptionGroups: RuleOptionGroup[] = [
   },
 ]
 
+const siteRuleOptionKeys = ruleOptionGroups
+  .filter((group) => group.title !== '地区网站')
+  .flatMap((group) => group.options.map((option) => option.key))
+
+const regionRuleOptionKeys = ruleOptionGroups
+  .find((group) => group.title === '地区网站')?.options.map((option) => option.key) ?? []
+
+// Display-only mirror of regionOptions.regions in global_script.js.
+const supportedNodeRegions = [
+  'HK香港', 'US美国', 'JP日本', 'KR韩国', 'SG新加坡', 'CN中国大陆', 'TW台湾省',
+  'GB英国', 'DE德国', 'MY马来西亚', 'TK土耳其', 'CA加拿大', 'FR法国', 'GR希腊',
+  'LT立陶宛', 'MK北马其顿', 'NL荷兰', 'PL波兰', 'SE瑞典', 'AR阿根廷',
+] as const
+
 function cloneDefaultConfig(): GeneratorConfig {
   return cloneGeneratorConfig(defaultGeneratorConfig)
 }
@@ -120,10 +134,12 @@ const customRuleListFields = [
 const customRuleTargetOptions = [
   'DIRECT',
   'REJECT',
+  '直连',
   '默认节点',
   '下载软件',
   '国内网站',
   '其他外网',
+  '其他节点',
   '日本网站',
   '香港网站',
   '美国网站',
@@ -155,14 +171,8 @@ const customRuleTargetOptions = [
 
 const customTargetValue = '__custom__'
 
-const reservedCustomRuleNames = new Set([
-  'direct',
-  'defaultProxy',
-  'downloadApps',
-  'japanSites',
-  'hkSites',
-  'usSites',
-])
+const builtInRuleNames = new Set(Object.keys(builtInCustomRules))
+const builtInRuleSetNames = new Set(Object.keys(builtInRuleSets))
 
 function createCustomRule(): CustomRule {
   return {
@@ -173,6 +183,40 @@ function createCustomRule(): CustomRule {
     processName: [],
     ruleSets: [],
   }
+}
+
+function createRuleSet(): RuleSetConfig {
+  return {
+    behavior: 'classical',
+    format: 'text',
+    interval: 86400,
+    url: 'https://example.com/rules.list',
+    path: './ruleset/example.list',
+  }
+}
+
+function activeRules(draft: GeneratorConfig): CustomRules {
+  const removed = new Set(draft.removedBuiltInRules ?? [])
+  return Object.fromEntries(
+    Object.entries({ ...builtInCustomRules, ...(draft.customRules ?? {}) })
+      .filter(([name]) => !removed.has(name)),
+  )
+}
+
+function activeRuleSets(draft: GeneratorConfig): CustomRuleSets {
+  const removed = new Set(draft.removedBuiltInRuleSets ?? [])
+  return Object.fromEntries(
+    Object.entries({ ...builtInRuleSets, ...(draft.customRuleSets ?? {}) })
+      .filter(([name]) => !removed.has(name)),
+  )
+}
+
+function isRuleSetBehavior(value: string): value is RuleSetConfig['behavior'] {
+  return value === 'classical' || value === 'domain' || value === 'ipcidr'
+}
+
+function isRuleSetFormat(value: string): value is RuleSetConfig['format'] {
+  return value === 'mrs' || value === 'text' || value === 'yaml'
 }
 
 function parseLineList(value: string): string[] {
@@ -202,237 +246,43 @@ function calculateReduction(originalBytes: number, compressedBytes: number): num
   return Math.max(0, ((originalBytes - compressedBytes) / originalBytes) * 100)
 }
 
-type ContentCategory = 'all' | 'rules' | 'ruleProviders' | 'proxyGroups'
-type ContentMode = 'browse' | 'add'
-type ContentAddType = 'rule' | 'ruleProvider' | 'proxyGroup'
-
-function isContentCategory(value: string): value is ContentCategory {
-  return value === 'all' || value === 'rules' || value === 'ruleProviders' || value === 'proxyGroups'
-}
-
-interface ContentEntry {
-  category: Exclude<ContentCategory, 'all'>
-  label: string
-  title: string
-  summary: string
-  value: string
-}
-
-interface ContentChangeSummary {
-  label: string
-  added: string[]
-  removed: string[]
-}
-
-const ruleProviderTemplate = JSON.stringify({
-  'example-provider': {
-    type: 'http',
-    behavior: 'domain',
-    format: 'text',
-    interval: 86400,
-    url: 'https://example.com/rules.list',
-    path: './ruleset/example-provider.list',
-  },
-}, null, 2)
-
-const proxyGroupTemplate = JSON.stringify({
-  name: '示例策略组',
-  type: 'select',
-  proxies: ['DIRECT'],
-}, null, 2)
-
-function cloneContentOverrides(config: GeneratorConfig) {
-  const source = config.contentOverrides ?? defaultScriptContentOverrides
-  return {
-    rules: { remove: [...source.rules.remove], add: [...source.rules.add] },
-    ruleProviders: {
-      remove: [...source.ruleProviders.remove],
-      add: Object.fromEntries(
-        Object.entries(source.ruleProviders.add).map(([name, provider]) => [name, { ...provider }]),
-      ),
-    },
-    proxyGroups: {
-      remove: [...source.proxyGroups.remove],
-      add: source.proxyGroups.add.map((group) => ({ ...group, proxies: [...group.proxies] })),
-    },
-  }
-}
-
-function parseRuleProviderJson(value: string): Record<string, RuleProviderConfig> | null {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(value)
-  } catch {
-    return null
-  }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
-  const entries = Object.entries(parsed)
-  if (entries.length === 0) return null
-  const providers: Record<string, RuleProviderConfig> = {}
-  for (const [name, provider] of entries) {
-    if (!isRuleProviderConfig(provider)) return null
-    providers[name] = provider
-  }
-  return providers
-}
-
-function parseProxyGroupJson(value: string): ProxyGroupConfig[] | null {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(value)
-  } catch {
-    return null
-  }
-  const groups = Array.isArray(parsed) ? parsed : [parsed]
-  if (groups.length === 0 || groups.some((group) => !isProxyGroupConfig(group))) return null
-  return groups
-}
-
-function contentInputError(error: string | null, addType: ContentAddType): string | null {
-  const prefix = addType === 'rule'
-    ? '规则内容'
-    : addType === 'ruleProvider' ? '规则提供者' : '策略组'
-  return error?.startsWith(prefix) ? error : null
-}
-
-function createPreviewDraft(
-  draft: GeneratorConfig,
-  newRule: string,
-  providerJson: string,
-  proxyGroupJson: string,
-): GeneratorConfig {
-  const previewDraft = cloneGeneratorConfig(draft)
-  const overrides = cloneContentOverrides(previewDraft)
-  const rule = newRule.trim()
-  if (rule) {
-    overrides.rules.add = overrides.rules.add.filter((item) => item !== rule)
-    overrides.rules.add.push(rule)
-    overrides.rules.remove = overrides.rules.remove.filter((item) => item !== rule)
-  }
-  const providers = parseRuleProviderJson(providerJson)
-  if (providers) {
-    for (const [name, provider] of Object.entries(providers)) {
-      overrides.ruleProviders.add[name] = provider
-      overrides.ruleProviders.remove = overrides.ruleProviders.remove.filter((item) => item !== name)
-    }
-  }
-  const groups = parseProxyGroupJson(proxyGroupJson)
-  if (groups) {
-    const names = new Set(groups.map((group) => group.name))
-    overrides.proxyGroups.add = overrides.proxyGroups.add.filter((group) => !names.has(group.name))
-    overrides.proxyGroups.add.push(...groups)
-    overrides.proxyGroups.remove = overrides.proxyGroups.remove.filter((name) => !names.has(name))
-  }
-  previewDraft.contentOverrides = overrides
-  return previewDraft
-}
-
-function contentEntries(content: GeneratedContent): ContentEntry[] {
-  return [
-    ...content.rules.map((rule) => {
-      const [kind, ...parts] = rule.split(',')
-      const target = parts.pop() ?? ''
-      const match = parts.join(',')
-      return {
-        category: 'rules' as const,
-        label: rule,
-        title: match ? `${kind} · ${match}` : kind,
-        summary: `目标：${target}`,
-        value: rule,
-      }
-    }),
-    ...Object.entries(content.ruleProviders).map(([name, provider]) => ({
-      category: 'ruleProviders' as const,
-      label: name,
-      title: name,
-      summary: `${provider.type} · ${provider.behavior}/${provider.format}`,
-      value: JSON.stringify(provider),
-    })),
-    ...content.proxyGroups.map((group) => ({
-      category: 'proxyGroups' as const,
-      label: group.name,
-      title: group.name,
-      summary: `${group.type} · ${group.proxies.length} 个代理`,
-      value: JSON.stringify(group),
-    })),
-  ]
-}
-
-function contentChangeSummaries(config: GeneratorConfig): ContentChangeSummary[] {
-  const overrides = config.contentOverrides ?? defaultScriptContentOverrides
-  return [
-    {
-      label: '规则',
-      added: overrides.rules.add,
-      removed: overrides.rules.remove,
-    },
-    {
-      label: '规则提供者',
-      added: Object.keys(overrides.ruleProviders.add),
-      removed: overrides.ruleProviders.remove,
-    },
-    {
-      label: '策略组',
-      added: overrides.proxyGroups.add.map((group) => group.name),
-      removed: overrides.proxyGroups.remove,
-    },
-  ]
-}
-
 function App() {
   const [workspace, setWorkspace] = useState<GeneratorWorkspace>(() => loadWorkspace())
   const [presetName, setPresetName] = useState('')
   const [customRuleName, setCustomRuleName] = useState('')
+  const [customRuleSetName, setCustomRuleSetName] = useState('')
   const [selectedPresetId, setSelectedPresetId] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [isMinifying, setIsMinifying] = useState(false)
   const [activeSection, setActiveSection] = useState<WorkbenchSection>('overview')
-  const [isPreviewOpen, setIsPreviewOpen] = useState(true)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false)
-  const [contentSearch, setContentSearch] = useState('')
-  const [contentCategory, setContentCategory] = useState<ContentCategory>('all')
-  const [contentMode, setContentMode] = useState<ContentMode>('browse')
-  const [contentAddType, setContentAddType] = useState<ContentAddType>('rule')
-  const [newContentRule, setNewContentRule] = useState('')
-  const [newRuleProviderJson, setNewRuleProviderJson] = useState('')
-  const [newProxyGroupJson, setNewProxyGroupJson] = useState('')
-  const [undoAction, setUndoAction] = useState<{ label: string; contentOverrides: GeneratorConfig['contentOverrides'] } | null>(null)
   const [minifiedStats, setMinifiedStats] = useState<{
     size: number
     reduction: number
   } | null>(null)
-  const previewDraft = useMemo(
-    () => createPreviewDraft(workspace.draft, newContentRule, newRuleProviderJson, newProxyGroupJson),
-    [newContentRule, newProxyGroupJson, newRuleProviderJson, workspace.draft],
-  )
-  const script = useMemo(() => renderScript(previewDraft), [previewDraft])
-  const hasPendingPreviewEdits = Boolean(
-    newContentRule.trim() || parseRuleProviderJson(newRuleProviderJson) || parseProxyGroupJson(newProxyGroupJson),
-  )
-  const generatedContent = useMemo(() => inspectGeneratedContent(workspace.draft), [workspace.draft])
-  const contentChanges = useMemo(() => contentChangeSummaries(previewDraft), [previewDraft])
-  const filteredContent = useMemo(() => {
-    const query = contentSearch.trim().toLocaleLowerCase()
-    return contentEntries(generatedContent).filter((entry) => {
-      if (contentCategory !== 'all' && entry.category !== contentCategory) return false
-      if (!query) return true
-      const categoryLabel = entry.category === 'rules'
-        ? '规则'
-        : entry.category === 'ruleProviders' ? '规则提供者' : '策略组'
-      return `${categoryLabel} ${entry.label} ${entry.value}`.toLocaleLowerCase().includes(query)
-    })
-  }, [contentCategory, contentSearch, generatedContent])
+  const script = useMemo(() => renderScript(workspace.draft), [workspace.draft])
   const scriptSize = useMemo(() => new Blob([script]).size, [script])
   const enabledRuleCount = useMemo(
     () => Object.values(workspace.draft.ruleOptions).filter(Boolean).length,
     [workspace.draft.ruleOptions],
   )
-  const customRuleCount = Object.keys(workspace.draft.customRules ?? {}).length
-  const contentChangeCount = contentChanges.reduce((count, change) => count + change.added.length + change.removed.length, 0)
+  const enabledSiteCount = useMemo(
+    () => siteRuleOptionKeys.filter((key) => workspace.draft.ruleOptions[key]).length,
+    [workspace.draft.ruleOptions],
+  )
+  const enabledRegionCount = useMemo(
+    () => regionRuleOptionKeys.filter((key) => workspace.draft.ruleOptions[key]).length,
+    [workspace.draft.ruleOptions],
+  )
+  const sourceRuleCount = Object.keys(activeRules(workspace.draft)).length
+  const ruleSetCount = Object.keys(activeRuleSets(workspace.draft)).length
   const sectionBadges: Partial<Record<WorkbenchSection, string>> = {
-    custom: customRuleCount > 0 ? String(customRuleCount) : undefined,
-    content: contentChangeCount > 0 ? String(contentChangeCount) : undefined,
+    sites: String(enabledSiteCount),
+    regions: String(enabledRegionCount),
+    rules: sourceRuleCount > 0 ? String(sourceRuleCount) : undefined,
+    ruleSets: ruleSetCount > 0 ? String(ruleSetCount) : undefined,
     presets: workspace.presets.length > 0 ? String(workspace.presets.length) : undefined,
   }
   const activeSectionDefinition = workbenchSections.find(({ id }) => id === activeSection)
@@ -441,19 +291,12 @@ function App() {
     setMinifiedStats(null)
   }, [script])
 
-  const clearPendingContentEditors = () => {
-    setNewContentRule('')
-    setNewRuleProviderJson('')
-    setNewProxyGroupJson('')
-  }
-
   const updateDraft = (draft: GeneratorConfig) => {
     const updatedWorkspace = { ...workspace, draft, recentScript: renderScript(draft) }
     saveWorkspace(updatedWorkspace)
     setWorkspace(updatedWorkspace)
     setError(null)
     setMinifiedStats(null)
-    setUndoAction(null)
   }
 
   const updateRuleOption = (key: RuleOptionKey, enabled: boolean) => {
@@ -470,7 +313,6 @@ function App() {
 
     try {
       updateDraft(parseGeneratedScript(await file.text()))
-      clearPendingContentEditors()
       setNotice(`已导入 ${file.name}`)
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : '无法导入脚本')
@@ -478,14 +320,13 @@ function App() {
   }
 
   const updateCustomRule = (name: string, changes: Partial<CustomRule>) => {
-    const customRules = workspace.draft.customRules ?? {}
-    const currentRule = customRules[name]
+    const currentRule = activeRules(workspace.draft)[name]
     if (!currentRule) return
 
     updateDraft({
       ...workspace.draft,
       customRules: {
-        ...customRules,
+        ...(workspace.draft.customRules ?? {}),
         [name]: { ...currentRule, ...changes },
       },
     })
@@ -497,11 +338,7 @@ function App() {
       setError('规则名称必须以英文字母开头，只能包含英文字母、数字和连字符')
       return
     }
-    if (reservedCustomRuleNames.has(normalizedName)) {
-      setError('规则名称与内置规则冲突，请更换名称')
-      return
-    }
-    if (workspace.draft.customRules?.[normalizedName]) {
+    if (activeRules(workspace.draft)[normalizedName] || builtInRuleNames.has(normalizedName)) {
       setError('规则名称已存在，请更换名称')
       return
     }
@@ -524,110 +361,71 @@ function App() {
     setNotice(`已删除规则 ${name}`)
   }
 
-  const updateContentOverrides = (contentOverrides: GeneratorConfig['contentOverrides']) => {
-    updateDraft({ ...workspace.draft, contentOverrides })
+  const handleDisableBuiltInRule = (name: string) => {
+    const removedBuiltInRules = workspace.draft.removedBuiltInRules ?? []
+    if (removedBuiltInRules.includes(name)) return
+    updateDraft({ ...workspace.draft, removedBuiltInRules: [...removedBuiltInRules, name] })
+    setNotice(`已禁用内置规则 ${name}`)
   }
 
-  const handleDeleteContent = (entry: ContentEntry) => {
-    const overrides = cloneContentOverrides(workspace.draft)
-    const overridesBeforeDelete = cloneContentOverrides(workspace.draft)
-    if (entry.category === 'rules') {
-      overrides.rules.add = overrides.rules.add.filter((rule) => rule !== entry.value)
-      if (!overrides.rules.remove.includes(entry.value)) overrides.rules.remove.push(entry.value)
-    } else if (entry.category === 'ruleProviders') {
-      delete overrides.ruleProviders.add[entry.label]
-      if (!overrides.ruleProviders.remove.includes(entry.label)) overrides.ruleProviders.remove.push(entry.label)
-    } else {
-      overrides.proxyGroups.add = overrides.proxyGroups.add.filter((group) => group.name !== entry.label)
-      if (!overrides.proxyGroups.remove.includes(entry.label)) overrides.proxyGroups.remove.push(entry.label)
-    }
-    updateContentOverrides(overrides)
-    setUndoAction({ label: entry.label, contentOverrides: overridesBeforeDelete })
-    setNotice(`已删除脚本${entry.category === 'rules' ? '规则' : entry.category === 'ruleProviders' ? '提供者' : '策略组'} ${entry.label}`)
+  const handleRestoreBuiltInRule = (name: string) => {
+    updateDraft({
+      ...workspace.draft,
+      removedBuiltInRules: (workspace.draft.removedBuiltInRules ?? []).filter((item) => item !== name),
+    })
+    setNotice(`已恢复内置规则 ${name}`)
   }
 
-  const handleUndoDelete = () => {
-    if (!undoAction) return
-    updateContentOverrides(undoAction.contentOverrides)
-    setNotice(`已恢复脚本内容 ${undoAction.label}`)
+  const updateRuleSet = (name: string, changes: Partial<RuleSetConfig>) => {
+    const currentRuleSet = activeRuleSets(workspace.draft)[name]
+    if (!currentRuleSet) return
+    updateDraft({
+      ...workspace.draft,
+      customRuleSets: {
+        ...(workspace.draft.customRuleSets ?? {}),
+        [name]: { ...currentRuleSet, ...changes },
+      },
+    })
   }
 
-  const handleAddContentRule = () => {
-    const rule = newContentRule.trim()
-    if (!rule) {
-      setError('规则内容不能为空')
+  const handleAddRuleSet = () => {
+    const normalizedName = customRuleSetName.trim()
+    if (!/^[A-Za-z][A-Za-z0-9-]*$/.test(normalizedName)) {
+      setError('规则集名称必须以英文字母开头，只能包含英文字母、数字和连字符')
       return
     }
-    const overrides = cloneContentOverrides(workspace.draft)
-    if (overrides.rules.add.includes(rule)) {
-      setError('规则内容已存在')
+    if (activeRuleSets(workspace.draft)[normalizedName] || builtInRuleSetNames.has(normalizedName)) {
+      setError('规则集名称已存在，请更换名称')
       return
     }
-    overrides.rules.add.push(rule)
-    overrides.rules.remove = overrides.rules.remove.filter((item) => item !== rule)
-    updateContentOverrides(overrides)
-    setNewContentRule('')
-    setNotice(`已添加脚本规则 ${rule}`)
+    updateDraft({
+      ...workspace.draft,
+      customRuleSets: { ...(workspace.draft.customRuleSets ?? {}), [normalizedName]: createRuleSet() },
+    })
+    setCustomRuleSetName('')
+    setNotice(`已添加规则集 ${normalizedName}`)
   }
 
-  const handleAddRuleProvider = () => {
-    const validProviders = parseRuleProviderJson(newRuleProviderJson)
-    if (!validProviders) {
-      setError(newRuleProviderJson.trim().startsWith('{') ? '规则提供者 JSON 结构无效' : '规则提供者必须是有效 JSON')
+  const handleDeleteRuleSet = (name: string) => {
+    if (builtInRuleSetNames.has(name)) {
+      const removedBuiltInRuleSets = workspace.draft.removedBuiltInRuleSets ?? []
+      if (removedBuiltInRuleSets.includes(name)) return
+      updateDraft({ ...workspace.draft, removedBuiltInRuleSets: [...removedBuiltInRuleSets, name] })
+      setNotice(`已禁用内置规则集 ${name}`)
       return
     }
-    const entries = Object.entries(validProviders)
-    const overrides = cloneContentOverrides(workspace.draft)
-    for (const [name, provider] of Object.entries(validProviders)) {
-      overrides.ruleProviders.add[name] = provider
-      overrides.ruleProviders.remove = overrides.ruleProviders.remove.filter((item) => item !== name)
-    }
-    updateContentOverrides(overrides)
-    setNewRuleProviderJson('')
-    setNotice(`已添加 ${entries.length} 个规则提供者`)
+    const customRuleSets = { ...(workspace.draft.customRuleSets ?? {}) }
+    delete customRuleSets[name]
+    updateDraft({ ...workspace.draft, customRuleSets })
+    setNotice(`已删除规则集 ${name}`)
   }
 
-  const handleAddProxyGroup = () => {
-    const parsedGroups = parseProxyGroupJson(newProxyGroupJson)
-    if (!parsedGroups) {
-      setError(newProxyGroupJson.trim().startsWith('{') || newProxyGroupJson.trim().startsWith('[') ? '策略组 JSON 结构无效' : '策略组必须是有效 JSON')
-      return
-    }
-    const overrides = cloneContentOverrides(workspace.draft)
-    const names = new Set(parsedGroups.map((group) => group.name))
-    overrides.proxyGroups.add = overrides.proxyGroups.add.filter((group) => !names.has(group.name))
-    overrides.proxyGroups.add.push(...parsedGroups)
-    overrides.proxyGroups.remove = overrides.proxyGroups.remove.filter((name) => !names.has(name))
-    updateContentOverrides(overrides)
-    setNewProxyGroupJson('')
-    setNotice(`已添加 ${parsedGroups.length} 个策略组`)
-  }
-
-  const handleFillProviderTemplate = () => {
-    setNewRuleProviderJson(ruleProviderTemplate)
-    setError(null)
-    setNotice('已填入规则提供者模板，请按需修改后添加')
-  }
-
-  const handleFillProxyGroupTemplate = () => {
-    setNewProxyGroupJson(proxyGroupTemplate)
-    setError(null)
-    setNotice('已填入策略组模板，请按需修改后添加')
-  }
-
-  const handleContentRuleChange = (value: string) => {
-    setNewContentRule(value)
-    setError(null)
-  }
-
-  const handleRuleProviderJsonChange = (value: string) => {
-    setNewRuleProviderJson(value)
-    setError(null)
-  }
-
-  const handleProxyGroupJsonChange = (value: string) => {
-    setNewProxyGroupJson(value)
-    setError(null)
+  const handleRestoreBuiltInRuleSet = (name: string) => {
+    updateDraft({
+      ...workspace.draft,
+      removedBuiltInRuleSets: (workspace.draft.removedBuiltInRuleSets ?? []).filter((item) => item !== name),
+    })
+    setNotice(`已恢复内置规则集 ${name}`)
   }
 
   const handleConfigImport = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -637,7 +435,6 @@ function App() {
 
     try {
       updateDraft(parseConfigFile(await file.text()))
-      clearPendingContentEditors()
       setNotice(`已导入配置 ${file.name}`)
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : '无法导入配置')
@@ -648,7 +445,6 @@ function App() {
     if (!window.confirm('确定恢复默认配置吗？当前配置将被覆盖。')) return
 
     updateDraft(cloneDefaultConfig())
-    clearPendingContentEditors()
     setNotice('已恢复默认配置')
   }
 
@@ -672,7 +468,6 @@ function App() {
     if (!preset) return
 
     updateDraft(preset.config)
-    clearPendingContentEditors()
     setNotice(`已加载 ${preset.name}`)
   }
 
@@ -739,7 +534,7 @@ function App() {
             draft={workspace.draft}
             scriptSize={scriptSize}
             enabledRuleCount={enabledRuleCount}
-            customRuleCount={customRuleCount}
+            customRuleCount={sourceRuleCount}
             onOpenPreview={() => setIsPreviewOpen(true)}
           />
         )
@@ -761,45 +556,29 @@ function App() {
         return (
           <RegionsSection
             draft={workspace.draft}
-            onChange={updateRuleOption}
+            onRuleOptionChange={updateRuleOption}
+            onDraftChange={updateDraft}
           />
         )
-      case 'custom':
+      case 'rules':
+      case 'ruleSets':
         return (
           <CustomRulesSection
+            mode={activeSection}
             draft={workspace.draft}
             customRuleName={customRuleName}
             onCustomRuleNameChange={setCustomRuleName}
             onAdd={handleAddCustomRule}
             onChange={updateCustomRule}
             onDelete={handleDeleteCustomRule}
-          />
-        )
-      case 'content':
-        return (
-          <ScriptContentSection
-            entries={filteredContent}
-            search={contentSearch}
-            category={contentCategory}
-            mode={contentMode}
-            addType={contentAddType}
-            newRule={newContentRule}
-            providerJson={newRuleProviderJson}
-            proxyGroupJson={newProxyGroupJson}
-            error={error}
-            onSearchChange={setContentSearch}
-            onCategoryChange={setContentCategory}
-            onModeChange={setContentMode}
-            onAddTypeChange={setContentAddType}
-            onRuleChange={handleContentRuleChange}
-            onProviderJsonChange={handleRuleProviderJsonChange}
-            onProxyGroupJsonChange={handleProxyGroupJsonChange}
-            onDelete={handleDeleteContent}
-            onAddRule={handleAddContentRule}
-            onAddProvider={handleAddRuleProvider}
-            onAddProxyGroup={handleAddProxyGroup}
-            onFillProviderTemplate={handleFillProviderTemplate}
-            onFillProxyGroupTemplate={handleFillProxyGroupTemplate}
+            onDisableBuiltInRule={handleDisableBuiltInRule}
+            onRestoreBuiltInRule={handleRestoreBuiltInRule}
+            customRuleSetName={customRuleSetName}
+            onCustomRuleSetNameChange={setCustomRuleSetName}
+            onAddRuleSet={handleAddRuleSet}
+            onRuleSetChange={updateRuleSet}
+            onDeleteRuleSet={handleDeleteRuleSet}
+            onRestoreBuiltInRuleSet={handleRestoreBuiltInRuleSet}
           />
         )
       case 'presets':
@@ -839,6 +618,13 @@ function App() {
               rel="noreferrer"
             >
               给项目点 Star
+            </a>
+            <a
+              href="https://github.com/Adsryen/clash-override/pulls"
+              target="_blank"
+              rel="noreferrer"
+            >
+              欢迎提交 PR，一起改进这个项目
             </a>
           </div>
         </div>
@@ -905,11 +691,6 @@ function App() {
       {(error || notice) && (
         <div className={error ? 'status-message error' : 'status-message'} role={error ? 'alert' : 'status'}>
           {error ?? notice}
-          {!error && undoAction && (
-            <button className="status-action" type="button" onClick={handleUndoDelete}>
-              撤销删除
-            </button>
-          )}
         </div>
       )}
 
@@ -922,9 +703,7 @@ function App() {
               <h2>{activeSectionDefinition?.label}</h2>
               <p>{activeSectionDefinition?.description}</p>
             </div>
-            <span className={`draft-status ${hasPendingPreviewEdits ? 'pending' : ''}`}>
-              {hasPendingPreviewEdits ? '预览中有未提交编辑' : '已保存'}
-            </span>
+            <span className="draft-status">已保存</span>
           </div>
           {renderSection()}
         </section>
@@ -933,8 +712,7 @@ function App() {
             script={script}
             scriptSize={scriptSize}
             minifiedStats={minifiedStats}
-            contentChanges={contentChanges}
-            previewStatus={hasPendingPreviewEdits ? '预览中' : '已生成'}
+            previewStatus="已生成"
             onClose={() => setIsPreviewOpen(false)}
             onCopy={handleCopy}
             onDownload={handleDownload}
@@ -1011,8 +789,8 @@ function OverviewSection({
   return (
     <div className="overview-section">
       <section className="summary-grid" aria-label="配置摘要">
-        <div className="summary-item"><strong>{enabledRuleCount}</strong><span>启用规则</span></div>
-        <div className="summary-item"><strong>{customRuleCount}</strong><span>自定义规则</span></div>
+        <div className="summary-item"><strong>{enabledRuleCount}</strong><span>启用分流项</span></div>
+        <div className="summary-item"><strong>{customRuleCount}</strong><span>规则总数</span></div>
         <div className="summary-item"><strong>{runtimeCount}/3</strong><span>运行开关</span></div>
         <div className="summary-item"><strong>{formatBytes(scriptSize)}</strong><span>脚本大小</span></div>
       </section>
@@ -1042,8 +820,6 @@ function RuntimeSection({ draft, onChange }: RuntimeSectionProps) {
         <Toggle label="启用覆写" checked={draft.enable} onChange={(enabled) => onChange({ ...draft, enable: enabled })} />
         <Toggle label="自动测速" checked={draft.enableUrltest} onChange={(enabled) => onChange({ ...draft, enableUrltest: enabled })} />
         <Toggle label="DNS 覆写" checked={draft.enableDnsOverride} onChange={(enabled) => onChange({ ...draft, enableDnsOverride: enabled })} />
-        <Toggle label="地区自动识别" checked={draft.regionOptions.autoDetect} onChange={(enabled) => onChange({ ...draft, regionOptions: { ...draft.regionOptions, autoDetect: enabled } })} />
-        <Toggle label="过滤高倍率节点" checked={draft.regionOptions.excludeHighPercentage} onChange={(enabled) => onChange({ ...draft, regionOptions: { ...draft.regionOptions, excludeHighPercentage: enabled } })} />
       </div>
     </section>
   )
@@ -1081,223 +857,114 @@ function SitesSection({ draft, onChange }: SitesSectionProps) {
   return <RuleOptionsSection draft={draft} groups={ruleOptionGroups.filter((group) => group.title !== '地区网站')} onChange={onChange} />
 }
 
-function RegionsSection({ draft, onChange }: SitesSectionProps) {
-  return <RuleOptionsSection draft={draft} groups={ruleOptionGroups.filter((group) => group.title === '地区网站')} onChange={onChange} />
+interface RegionsSectionProps {
+  draft: GeneratorConfig
+  onRuleOptionChange: (key: RuleOptionKey, enabled: boolean) => void
+  onDraftChange: (draft: GeneratorConfig) => void
+}
+
+function RegionsSection({ draft, onRuleOptionChange, onDraftChange }: RegionsSectionProps) {
+  return (
+    <div className="regional-options">
+      <p className="regional-options-intro">节点来自订阅；这里决定哪些地区网站生成专用策略组，以及如何识别和筛选地区节点。</p>
+      <p className="regional-options-note">地区网站分流目前提供日本、香港、美国、俄罗斯 4 项开关。节点识别表由脚本内置规则维护，下面只展示当前可识别的订阅节点地区，不编辑识别词或倍率上限。</p>
+      <details className="regional-detection-list">
+        <summary>查看可识别的订阅节点地区（{supportedNodeRegions.length} 项）</summary>
+        <ul>
+          {supportedNodeRegions.map((region) => <li key={region}>{region}</li>)}
+        </ul>
+      </details>
+      <section className="settings-section regional-detection" aria-labelledby="regional-detection-heading">
+        <h3 id="regional-detection-heading">识别与筛选</h3>
+        <p>开启自动识别后，脚本会根据节点名称归类地区；高倍率过滤会跳过名称中标注为高倍率的节点。</p>
+        <div className="option-grid">
+          <Toggle label="自动识别地区节点" checked={draft.regionOptions.autoDetect} onChange={(enabled) => onDraftChange({ ...draft, regionOptions: { ...draft.regionOptions, autoDetect: enabled } })} />
+          <Toggle label="过滤高倍率节点" checked={draft.regionOptions.excludeHighPercentage} onChange={(enabled) => onDraftChange({ ...draft, regionOptions: { ...draft.regionOptions, excludeHighPercentage: enabled } })} />
+        </div>
+      </section>
+      <RuleOptionsSection draft={draft} groups={ruleOptionGroups.filter((group) => group.title === '地区网站')} onChange={onRuleOptionChange} />
+    </div>
+  )
 }
 
 interface CustomRulesSectionProps {
+  mode: 'rules' | 'ruleSets'
   draft: GeneratorConfig
   customRuleName: string
   onCustomRuleNameChange: (value: string) => void
   onAdd: () => void
   onChange: (name: string, changes: Partial<CustomRule>) => void
   onDelete: (name: string) => void
+  onDisableBuiltInRule: (name: string) => void
+  onRestoreBuiltInRule: (name: string) => void
+  customRuleSetName: string
+  onCustomRuleSetNameChange: (value: string) => void
+  onAddRuleSet: () => void
+  onRuleSetChange: (name: string, changes: Partial<RuleSetConfig>) => void
+  onDeleteRuleSet: (name: string) => void
+  onRestoreBuiltInRuleSet: (name: string) => void
 }
 
-function CustomRulesSection({ draft, customRuleName, onCustomRuleNameChange, onAdd, onChange, onDelete }: CustomRulesSectionProps) {
+function CustomRulesSection({
+  mode,
+  draft,
+  customRuleName,
+  onCustomRuleNameChange,
+  onAdd,
+  onChange,
+  onDelete,
+  onDisableBuiltInRule,
+  onRestoreBuiltInRule,
+  customRuleSetName,
+  onCustomRuleSetNameChange,
+  onAddRuleSet,
+  onRuleSetChange,
+  onDeleteRuleSet,
+  onRestoreBuiltInRuleSet,
+}: CustomRulesSectionProps) {
+  const rules = activeRules(draft)
+  const ruleSets = activeRuleSets(draft)
+  const disabledRules = (draft.removedBuiltInRules ?? []).filter((name) => builtInRuleNames.has(name))
+  const disabledRuleSets = (draft.removedBuiltInRuleSets ?? []).filter((name) => builtInRuleSetNames.has(name))
+
   return (
     <section className="settings-section custom-rules" aria-labelledby="custom-rules-heading">
-      <div className="section-heading"><div><h3 id="custom-rules-heading">自定义规则</h3><p>每行填写一项，生成脚本时会追加到内置规则。</p></div></div>
+      <div className="section-heading"><div><h3 id="custom-rules-heading">{mode === 'rules' ? '规则' : '规则集'}</h3><p>变更会立即保存并更新预览。</p><p className="section-explanation">{mode === 'rules' ? '规则 = 匹配条件 + 目标策略。匹配到域名、关键词或进程后，流量会交给目标策略组。' : '规则集 = 可定时更新的外部匹配清单。它不决定目标策略，需要在规则的“规则集”字段中引用才会生效。'}</p></div></div>
+      {mode === 'rules' && <section className="rule-management-group" aria-labelledby="rules-heading">
+        <div className="rule-management-heading">
+          <div><h4 id="rules-heading">规则</h4><p>内置规则可编辑或禁用；新增规则可随时删除。</p></div>
+        </div>
       <div className="custom-rule-adder">
         <label><span>规则名称</span><input value={customRuleName} onChange={(event) => onCustomRuleNameChange(event.target.value)} placeholder="例如 gamingSites" /></label>
         <button className="button secondary" type="button" onClick={onAdd}>添加规则</button>
       </div>
       <div className="custom-rule-list">
-        {Object.entries(draft.customRules ?? {}).map(([name, rule]) => <CustomRuleEditor key={name} name={name} rule={rule} onChange={(changes) => onChange(name, changes)} onDelete={() => onDelete(name)} />)}
-        {Object.keys(draft.customRules ?? {}).length === 0 && <p className="empty-state">暂未添加自定义规则。</p>}
+        {Object.entries(rules).map(([name, rule]) => <CustomRuleEditor key={name} name={name} rule={rule} builtIn={builtInRuleNames.has(name)} onChange={(changes) => onChange(name, changes)} onDelete={() => onDelete(name)} onDisable={() => onDisableBuiltInRule(name)} />)}
+        {disabledRules.length > 0 && (
+          <div className="disabled-source-list" aria-label="已禁用内置规则">
+            {disabledRules.map((name) => <button className="button secondary" type="button" key={name} onClick={() => onRestoreBuiltInRule(name)}>恢复内置规则 {name}</button>)}
+          </div>
+        )}
       </div>
-    </section>
-  )
-}
-
-interface ScriptContentSectionProps {
-  entries: ContentEntry[]
-  search: string
-  category: ContentCategory
-  mode: ContentMode
-  addType: ContentAddType
-  newRule: string
-  providerJson: string
-  proxyGroupJson: string
-  error: string | null
-  onSearchChange: (value: string) => void
-  onCategoryChange: (value: ContentCategory) => void
-  onModeChange: (value: ContentMode) => void
-  onAddTypeChange: (value: ContentAddType) => void
-  onRuleChange: (value: string) => void
-  onProviderJsonChange: (value: string) => void
-  onProxyGroupJsonChange: (value: string) => void
-  onDelete: (entry: ContentEntry) => void
-  onAddRule: () => void
-  onAddProvider: () => void
-  onAddProxyGroup: () => void
-  onFillProviderTemplate: () => void
-  onFillProxyGroupTemplate: () => void
-}
-
-function ScriptContentSection({
-  entries,
-  search,
-  category,
-  mode,
-  addType,
-  newRule,
-  providerJson,
-  proxyGroupJson,
-  error,
-  onSearchChange,
-  onCategoryChange,
-  onModeChange,
-  onAddTypeChange,
-  onRuleChange,
-  onProviderJsonChange,
-  onProxyGroupJsonChange,
-  onDelete,
-  onAddRule,
-  onAddProvider,
-  onAddProxyGroup,
-  onFillProviderTemplate,
-  onFillProxyGroupTemplate,
-}: ScriptContentSectionProps) {
-  const inputError = contentInputError(error, addType)
-  const inputErrorId = `content-add-error-${addType}`
-  return (
-    <section className="settings-section script-content" aria-labelledby="script-content-heading">
-      <div className="section-heading">
-        <div>
-          <h3 id="script-content-heading">脚本内容</h3>
-          <p>目录来自当前生成结果；有效编辑会即时反映到脚本预览。</p>
+      <p className="rule-set-hint">可用规则集：{Object.keys(ruleSets).length > 0 ? Object.keys(ruleSets).join('、') : '暂无'}</p>
+      </section>}
+      {mode === 'ruleSets' && <section className="rule-management-group" aria-labelledby="rule-sets-heading">
+        <div className="rule-management-heading">
+          <div><h4 id="rule-sets-heading">规则集</h4><p>规则集会生成对应的 `rule-providers`，规则可在“规则集”字段中引用它们。</p><p>行为决定规则集按域名或 IP 等方式解析；格式要与远端文件一致；更新周期单位为秒。</p></div>
         </div>
-        <div className="content-mode-toggle" role="group" aria-label="脚本内容视图">
-          <button className={`button ${mode === 'browse' ? 'primary' : 'secondary'}`} type="button" aria-pressed={mode === 'browse'} onClick={() => onModeChange('browse')}>浏览内容</button>
-          <button className={`button ${mode === 'add' ? 'primary' : 'secondary'}`} type="button" aria-pressed={mode === 'add'} onClick={() => onModeChange('add')}>添加内容</button>
+        <div className="custom-rule-adder">
+          <label><span>规则集名称</span><input value={customRuleSetName} onChange={(event) => onCustomRuleSetNameChange(event.target.value)} placeholder="例如 gaming" /></label>
+          <button className="button secondary" type="button" onClick={onAddRuleSet}>添加规则集</button>
         </div>
-      </div>
-      {mode === 'browse' ? (
-        <>
-          <div className="content-toolbar">
-            <label>
-              <span>搜索脚本内容</span>
-              <div className="search-input-wrap">
-                <input
-                  type="search"
-                  role="searchbox"
-                  value={search}
-                  onChange={(event) => onSearchChange(event.target.value)}
-                />
-                {search && <button className="search-clear" type="button" aria-label="清除搜索" onClick={() => onSearchChange('')}>清除</button>}
-              </div>
-            </label>
-            <label>
-              <span>内容类别</span>
-              <select value={category} onChange={(event) => {
-                if (isContentCategory(event.target.value)) onCategoryChange(event.target.value)
-              }}>
-                <option value="all">全部</option>
-                <option value="rules">规则</option>
-                <option value="ruleProviders">规则提供者</option>
-                <option value="proxyGroups">策略组</option>
-              </select>
-            </label>
-            <span className="content-result-count" aria-live="polite">匹配 {entries.length} 项</span>
-          </div>
-          <div className="content-list" aria-label="脚本内容条目">
-            {entries.map((entry, index) => (
-              <article className="content-entry" key={`${entry.category}:${entry.label}:${index}`}>
-                <div className="content-entry-header">
-                  <div className="content-entry-title">
-                    <span className="content-entry-kind">
-                      {entry.category === 'rules' ? '规则' : entry.category === 'ruleProviders' ? '规则提供者' : '策略组'}
-                    </span>
-                    <strong>{entry.title}</strong>
-                    <span className="content-entry-summary">{entry.summary}</span>
-                  </div>
-                  <button
-                    className="button danger content-delete"
-                    type="button"
-                    aria-label={`删除${entry.category === 'rules' ? '规则' : entry.category === 'ruleProviders' ? '提供者' : '策略组'} ${entry.label}`}
-                    onClick={() => onDelete(entry)}
-                  >
-                    删除
-                  </button>
-                </div>
-                <details className="content-entry-details">
-                  <summary>查看完整内容</summary>
-                  <pre className="content-entry-value">{entry.value}</pre>
-                </details>
-              </article>
-            ))}
-            {entries.length === 0 && <p className="empty-state">没有匹配的脚本内容。</p>}
-          </div>
-        </>
-      ) : (
-        <div className="content-add-workspace">
-          <div className="content-add-type-toggle" role="group" aria-label="添加内容类型">
-            <button className={`button ${addType === 'rule' ? 'primary' : 'secondary'}`} type="button" aria-pressed={addType === 'rule'} onClick={() => onAddTypeChange('rule')}>添加规则</button>
-            <button className={`button ${addType === 'ruleProvider' ? 'primary' : 'secondary'}`} type="button" aria-pressed={addType === 'ruleProvider'} onClick={() => onAddTypeChange('ruleProvider')}>规则提供者</button>
-            <button className={`button ${addType === 'proxyGroup' ? 'primary' : 'secondary'}`} type="button" aria-pressed={addType === 'proxyGroup'} onClick={() => onAddTypeChange('proxyGroup')}>策略组</button>
-          </div>
-          {addType === 'rule' && (
-            <div className="content-adder">
-              <div className="content-input-field">
-                <label>
-                  <span>新增规则</span>
-                  <input
-                    value={newRule}
-                    aria-invalid={inputError ? true : undefined}
-                    aria-describedby={inputError ? inputErrorId : undefined}
-                    onChange={(event) => onRuleChange(event.target.value)}
-                  />
-                </label>
-                {inputError && <p className="content-input-error" id={inputErrorId}>{inputError}</p>}
-              </div>
-              <button className="button secondary" type="button" onClick={onAddRule}>添加脚本规则</button>
-            </div>
-          )}
-          {addType === 'ruleProvider' && (
-            <div className="content-adder">
-              <div className="content-input-field">
-                <label>
-                  <span>新增规则提供者 JSON</span>
-                  <textarea
-                    value={providerJson}
-                    aria-invalid={inputError ? true : undefined}
-                    aria-describedby={inputError ? inputErrorId : undefined}
-                    onChange={(event) => onProviderJsonChange(event.target.value)}
-                    rows={8}
-                  />
-                </label>
-                {inputError && <p className="content-input-error" id={inputErrorId}>{inputError}</p>}
-              </div>
-              <div className="content-adder-actions">
-                <button className="button secondary" type="button" onClick={onFillProviderTemplate}>填入规则提供者模板</button>
-                <button className="button secondary" type="button" onClick={onAddProvider}>添加规则提供者</button>
-              </div>
-            </div>
-          )}
-          {addType === 'proxyGroup' && (
-            <div className="content-adder">
-              <div className="content-input-field">
-                <label>
-                  <span>新增策略组 JSON</span>
-                  <textarea
-                    value={proxyGroupJson}
-                    aria-invalid={inputError ? true : undefined}
-                    aria-describedby={inputError ? inputErrorId : undefined}
-                    onChange={(event) => onProxyGroupJsonChange(event.target.value)}
-                    rows={8}
-                  />
-                </label>
-                {inputError && <p className="content-input-error" id={inputErrorId}>{inputError}</p>}
-              </div>
-              <div className="content-adder-actions">
-                <button className="button secondary" type="button" onClick={onFillProxyGroupTemplate}>填入策略组模板</button>
-                <button className="button secondary" type="button" onClick={onAddProxyGroup}>添加策略组</button>
-              </div>
+        <div className="custom-rule-list">
+          {Object.entries(ruleSets).map(([name, ruleSet]) => <RuleSetEditor key={name} name={name} ruleSet={ruleSet} builtIn={builtInRuleSetNames.has(name)} onChange={(changes) => onRuleSetChange(name, changes)} onDelete={() => onDeleteRuleSet(name)} />)}
+          {disabledRuleSets.length > 0 && (
+            <div className="disabled-source-list" aria-label="已禁用内置规则集">
+              {disabledRuleSets.map((name) => <button className="button secondary" type="button" key={name} onClick={() => onRestoreBuiltInRuleSet(name)}>恢复内置规则集 {name}</button>)}
             </div>
           )}
         </div>
-      )}
+      </section>}
     </section>
   )
 }
@@ -1327,7 +994,6 @@ interface PreviewDrawerProps {
   script: string
   scriptSize: number
   minifiedStats: { size: number; reduction: number } | null
-  contentChanges: ContentChangeSummary[]
   previewStatus: string
   onClose: () => void
   onCopy: () => void
@@ -1336,39 +1002,15 @@ interface PreviewDrawerProps {
   isMinifying: boolean
 }
 
-function PreviewDrawer({ script, scriptSize, minifiedStats, contentChanges, previewStatus, onClose, onCopy, onDownload, onDownloadMinified, isMinifying }: PreviewDrawerProps) {
-  const hasContentChanges = contentChanges.some(({ added, removed }) => added.length > 0 || removed.length > 0)
+function PreviewDrawer({ script, scriptSize, minifiedStats, previewStatus, onClose, onCopy, onDownload, onDownloadMinified, isMinifying }: PreviewDrawerProps) {
   return (
     <aside className="preview-panel" id="script-preview-drawer" aria-label="脚本预览" aria-modal="false">
       <div className="preview-header">
         <div><p className="eyebrow">OUTPUT</p><h2>global_script.js</h2></div>
-        <div className="preview-header-meta"><button className="button secondary preview-close" type="button" aria-label="关闭预览面板" aria-expanded="true" aria-controls="script-preview-drawer" onClick={onClose}>关闭</button><span className={`file-status ${previewStatus === '预览中' ? 'pending' : ''}`}>{previewStatus}</span></div>
+        <div className="preview-header-meta"><button className="button secondary preview-close" type="button" aria-label="关闭预览" aria-expanded="true" aria-controls="script-preview-drawer" onClick={onClose}>关闭预览</button><span className={`file-status ${previewStatus === '预览中' ? 'pending' : ''}`}>{previewStatus}</span></div>
       </div>
       <div className="preview-actions"><button className="button secondary" type="button" onClick={onCopy}>复制预览脚本</button><button className="button secondary" type="button" onClick={onDownload}>下载预览脚本</button><button className="button secondary" type="button" disabled={isMinifying} onClick={onDownloadMinified}>{isMinifying ? '正在压缩...' : '下载预览压缩版'}</button></div>
       <div className="compression-summary" aria-label="脚本大小"><span>普通版 {formatBytes(scriptSize)}</span>{minifiedStats && <><span>压缩版 {formatBytes(minifiedStats.size)}</span><span>减少 {minifiedStats.reduction.toFixed(1)}%</span></>}</div>
-      {hasContentChanges && (
-        <section className="content-change-summary" aria-labelledby="content-change-heading">
-          <h3 id="content-change-heading">内容变更</h3>
-          <div className="content-change-list">
-            {contentChanges.map(({ label, added, removed }) => (
-              <article className="content-change-category" key={label}>
-                <h4>{label}</h4>
-                <div className="content-change-counts">
-                  <span>新增 {added.length} 项</span>
-                  <span>移除 {removed.length} 项</span>
-                </div>
-                <details>
-                  <summary>查看明细</summary>
-                  <div className="content-change-details">
-                    {added.length > 0 && <div><strong>新增</strong><ul>{added.map((item) => <li key={`add-${item}`}>{item}</li>)}</ul></div>}
-                    {removed.length > 0 && <div><strong>移除</strong><ul>{removed.map((item) => <li key={`remove-${item}`}>{item}</li>)}</ul></div>}
-                  </div>
-                </details>
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
       <pre className="script-preview" data-testid="script-preview"><code>{script}</code></pre>
     </aside>
   )
@@ -1396,11 +1038,13 @@ function Toggle({ label, checked, onChange }: ToggleProps) {
 interface CustomRuleEditorProps {
   name: string
   rule: CustomRule
+  builtIn: boolean
   onChange: (changes: Partial<CustomRule>) => void
   onDelete: () => void
+  onDisable: () => void
 }
 
-function CustomRuleEditor({ name, rule, onChange, onDelete }: CustomRuleEditorProps) {
+function CustomRuleEditor({ name, rule, builtIn, onChange, onDelete, onDisable }: CustomRuleEditorProps) {
   const [target, setTarget] = useState(rule.target)
 
   useEffect(() => {
@@ -1410,55 +1054,98 @@ function CustomRuleEditor({ name, rule, onChange, onDelete }: CustomRuleEditorPr
   return (
     <article className="custom-rule-card">
       <div className="custom-rule-card-header">
-        <h3>{name}</h3>
-        <button className="button danger" type="button" onClick={onDelete}>
-          删除规则 {name}
-        </button>
+        <div><h3>{name}</h3><span className="source-kind">{builtIn ? '内置规则' : '自定义规则'}</span></div>
+        {builtIn ? (
+          <button className="button danger" type="button" onClick={onDisable}>禁用内置规则 {name}</button>
+        ) : (
+          <button className="button danger" type="button" onClick={onDelete}>删除规则 {name}</button>
+        )}
       </div>
-      <label className="custom-rule-target">
-        <span>规则目标 {name}</span>
-        <input
-          value={target}
-          onChange={(event) => {
-            const nextTarget = event.target.value
-            setTarget(nextTarget)
-            if (nextTarget.trim()) {
-              onChange({ target: nextTarget })
-            }
-          }}
-        />
-      </label>
-      <label className="custom-rule-target-select">
-        <span>常用策略组 {name}</span>
-        <select
-          value={customRuleTargetOptions.some((option) => option === rule.target)
-            ? rule.target
-            : customTargetValue}
-          onChange={(event) => {
-            if (event.target.value !== customTargetValue) {
-              onChange({ target: event.target.value })
-            }
-          }}
-        >
-          <option value={customTargetValue}>自定义目标</option>
-          {customRuleTargetOptions.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="custom-rule-fields">
-        {customRuleListFields.map(([field, label]) => (
-          <label key={field}>
-            <span>{label} {name}</span>
-            <textarea
-              value={formatLineList(rule[field])}
-              onChange={(event) => onChange({ [field]: parseLineList(event.target.value) })}
-              rows={3}
+      <details className="rule-editor-details" open={!builtIn || name === 'direct'}>
+        <summary>编辑规则 {name}</summary>
+        <div className="rule-editor-body">
+          <label className="custom-rule-target">
+            <span>规则目标 {name}</span>
+            <input
+              value={target}
+              onChange={(event) => {
+                const nextTarget = event.target.value
+                setTarget(nextTarget)
+                if (nextTarget.trim()) {
+                  onChange({ target: nextTarget })
+                }
+              }}
             />
           </label>
-        ))}
+          <label className="custom-rule-target-select">
+            <span>常用策略组 {name}</span>
+            <select
+              value={customRuleTargetOptions.some((option) => option === rule.target)
+                ? rule.target
+                : customTargetValue}
+              onChange={(event) => {
+                if (event.target.value !== customTargetValue) {
+                  onChange({ target: event.target.value })
+                }
+              }}
+            >
+              <option value={customTargetValue}>自定义目标</option>
+              {customRuleTargetOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="custom-rule-fields">
+            {customRuleListFields.map(([field, label]) => (
+              <label key={field}>
+                <span>{label} {name}</span>
+                <textarea
+                  value={formatLineList(rule[field])}
+                  onChange={(event) => onChange({ [field]: parseLineList(event.target.value) })}
+                  rows={3}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+      </details>
+    </article>
+  )
+}
+
+interface RuleSetEditorProps {
+  name: string
+  ruleSet: RuleSetConfig
+  builtIn: boolean
+  onChange: (changes: Partial<RuleSetConfig>) => void
+  onDelete: () => void
+}
+
+function RuleSetEditor({ name, ruleSet, builtIn, onChange, onDelete }: RuleSetEditorProps) {
+  const [url, setUrl] = useState(ruleSet.url)
+  const [path, setPath] = useState(ruleSet.path)
+  const [interval, setInterval] = useState(String(ruleSet.interval))
+
+  useEffect(() => {
+    setUrl(ruleSet.url)
+    setPath(ruleSet.path)
+    setInterval(String(ruleSet.interval))
+  }, [ruleSet.interval, ruleSet.path, ruleSet.url])
+
+  return (
+    <article className="custom-rule-card rule-set-card">
+      <div className="custom-rule-card-header">
+        <div><h3>{name}</h3><span className="source-kind">{builtIn ? '内置规则集' : '自定义规则集'}</span></div>
+        <button className="button danger" type="button" onClick={onDelete}>{builtIn ? `禁用内置规则集 ${name}` : `删除规则集 ${name}`}</button>
+      </div>
+      <div className="rule-set-fields">
+        <label><span>规则集行为 {name}</span><select value={ruleSet.behavior} onChange={(event) => { if (isRuleSetBehavior(event.target.value)) onChange({ behavior: event.target.value }) }}><option value="classical">classical</option><option value="domain">domain</option><option value="ipcidr">ipcidr</option></select></label>
+        <label><span>规则集格式 {name}</span><select value={ruleSet.format} onChange={(event) => { if (isRuleSetFormat(event.target.value)) onChange({ format: event.target.value }) }}><option value="text">text</option><option value="mrs">mrs</option><option value="yaml">yaml</option></select></label>
+        <label><span>更新周期（秒） {name}</span><input type="number" min="1" value={interval} onChange={(event) => { const value = event.target.value; setInterval(value); const next = Number(value); if (Number.isFinite(next) && next > 0) onChange({ interval: next }) }} /></label>
+        <label><span>规则集地址 {name}</span><input value={url} onChange={(event) => { const value = event.target.value; setUrl(value); if (value.trim()) onChange({ url: value }) }} /></label>
+        <label className="rule-set-path"><span>规则集路径 {name}</span><input value={path} onChange={(event) => { const value = event.target.value; setPath(value); if (value.trim()) onChange({ path: value }) }} /></label>
       </div>
     </article>
   )

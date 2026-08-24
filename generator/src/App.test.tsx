@@ -29,6 +29,8 @@ describe('App', () => {
     anchorClick.mockClear()
     Object.assign(URL, { createObjectURL: createObjectUrl, revokeObjectURL: revokeObjectUrl })
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(anchorClick)
+    // Destructive deletes are gated by window.confirm; auto-accept so flows proceed.
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
 
   afterEach(() => {
@@ -119,6 +121,24 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: '删除规则 gamingSites' }))
     expect(screen.getByTestId('script-preview')).not.toHaveTextContent('"gamingSites"')
+  })
+
+  it('requires confirmation before deleting a custom rule', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /^规则$/ }))
+    await user.type(screen.getByRole('textbox', { name: '规则名称' }), 'gamingSites')
+    await user.click(screen.getByRole('button', { name: '添加规则' }))
+    expect(screen.getByRole('button', { name: '删除规则 gamingSites' })).toBeVisible()
+
+    vi.mocked(window.confirm).mockReturnValue(false)
+    await user.click(screen.getByRole('button', { name: '删除规则 gamingSites' }))
+    expect(screen.getByRole('button', { name: '删除规则 gamingSites' })).toBeVisible()
+
+    vi.mocked(window.confirm).mockReturnValue(true)
+    await user.click(screen.getByRole('button', { name: '删除规则 gamingSites' }))
+    expect(screen.queryByRole('button', { name: '删除规则 gamingSites' })).not.toBeInTheDocument()
   })
 
   it('manages built-in rules and rule sets from source configuration', async () => {

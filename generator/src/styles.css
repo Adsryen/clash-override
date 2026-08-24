@@ -609,11 +609,6 @@ legend {
   font-size: 12px;
 }
 
-.file-status.pending {
-  border-color: #c99a43;
-  color: #f2d48e;
-}
-
 .preview-header-meta {
   display: flex;
   min-width: 0;
@@ -879,12 +874,6 @@ legend {
   color: #27705c;
   background: #ecf6ef;
   font-size: 12px;
-}
-
-.draft-status.pending {
-  border-color: #e0bf77;
-  color: #8a5c16;
-  background: #fff7df;
 }
 
 .settings-panel {

@@ -371,6 +371,7 @@ function App() {
   }
 
   const handleDeleteCustomRule = (name: string) => {
+    if (!window.confirm(`确定删除规则 ${name} 吗？此操作无法撤销。`)) return
     const customRules = { ...(workspace.draft.customRules ?? {}) }
     delete customRules[name]
     updateDraft({ ...workspace.draft, customRules })
@@ -437,6 +438,10 @@ function App() {
       setNotice(`已禁用内置规则集 ${name}${impactMessage}`)
       return
     }
+    const confirmMessage = affectedRuleCount > 0
+      ? `确定删除规则集 ${name} 吗？将从 ${affectedRuleCount} 条规则中移除引用，此操作无法撤销。`
+      : `确定删除规则集 ${name} 吗？此操作无法撤销。`
+    if (!window.confirm(confirmMessage)) return
     const customRuleSets = { ...(workspace.draft.customRuleSets ?? {}) }
     delete customRuleSets[name]
     updateDraft({ ...workspace.draft, customRules, customRuleSets })
@@ -495,9 +500,11 @@ function App() {
   }
 
   const handleDeletePreset = () => {
-    if (!selectedPresetId) return
+    const preset = workspace.presets.find((item) => item.id === selectedPresetId)
+    if (!preset) return
 
-    setWorkspace(deletePreset(selectedPresetId))
+    if (!window.confirm(`确定删除预设「${preset.name}」吗？此操作无法撤销。`)) return
+    setWorkspace(deletePreset(preset.id))
     setSelectedPresetId('')
     setNotice('预设已删除')
   }
@@ -1201,16 +1208,20 @@ function CustomRuleEditor({ name, rule, ruleSetNames, builtIn, onChange, onDelet
                   onChange({ target: nextTarget })
                 }
               }}
+              onBlur={() => {
+                if (!target.trim()) setTarget(rule.target)
+              }}
             />
           </label>
           <label className="custom-rule-target-select">
             <span>常用策略组 {name}</span>
             <select
-              value={customRuleTargetOptions.some((option) => option === rule.target)
-                ? rule.target
+              value={customRuleTargetOptions.some((option) => option === target)
+                ? target
                 : customTargetValue}
               onChange={(event) => {
                 if (event.target.value !== customTargetValue) {
+                  setTarget(event.target.value)
                   onChange({ target: event.target.value })
                 }
               }}
@@ -1259,7 +1270,7 @@ function RuleSetEditor({ name, ruleSet, builtIn, onChange, onDelete }: RuleSetEd
         <div className="rule-set-fields">
           <label><span>规则集行为 {name}</span><select value={ruleSet.behavior} onChange={(event) => { if (isRuleSetBehavior(event.target.value)) onChange({ behavior: event.target.value }) }}><option value="classical">classical</option><option value="domain">domain</option><option value="ipcidr">ipcidr</option></select></label>
           <label><span>规则集格式 {name}</span><select value={ruleSet.format} onChange={(event) => { if (isRuleSetFormat(event.target.value)) onChange({ format: event.target.value }) }}><option value="text">text</option><option value="mrs">mrs</option><option value="yaml">yaml</option></select></label>
-          <label><span>更新周期（秒） {name}</span><input type="number" min="1" value={interval} onChange={(event) => { const value = event.target.value; setInterval(value); const next = Number(value); if (Number.isFinite(next) && next > 0) onChange({ interval: next }) }} /></label>
+          <label><span>更新周期（秒） {name}</span><input type="number" min="1" value={interval} onChange={(event) => { const value = event.target.value; setInterval(value); const next = Number(value); if (Number.isFinite(next) && next > 0) onChange({ interval: next }) }} onBlur={() => { const next = Number(interval); if (!Number.isFinite(next) || next <= 0) setInterval(String(ruleSet.interval)) }} /></label>
           <label><span>规则集地址 {name}</span><input value={url} onChange={(event) => { const value = event.target.value; setUrl(value); if (value.trim()) onChange({ url: value }) }} /></label>
           <label className="rule-set-path"><span>规则集路径 {name}</span><input value={path} onChange={(event) => { const value = event.target.value; setPath(value); if (value.trim()) onChange({ path: value }) }} /></label>
         </div>

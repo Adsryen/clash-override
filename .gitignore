@@ -28,4 +28,7 @@ generator/blob-report/
 .trellis/
 AGENTS.md
 
+# 文档目录不纳入版本控制
+docs/
+
 .gitattributes

@@ -45,8 +45,8 @@ const workbenchSections: WorkbenchSectionDefinition[] = [
   { id: 'runtime', label: '运行方式', description: '控制脚本开关、自动测速和 DNS 覆写' },
   { id: 'sites', label: '站点分流', description: '按服务开关生成对应的代理策略组' },
   { id: 'regions', label: '地区偏好', description: '选择地区站点，并决定如何识别订阅节点' },
-  { id: 'rules', label: '规则', description: '设置域名、关键词、进程等匹配条件，以及命中后的目标策略' },
-  { id: 'ruleSets', label: '规则集', description: '配置外部规则列表的地址和更新方式，再在规则中引用' },
+  { id: 'rules', label: '规则', description: '按匹配条件、规则集、目标策略完成分流配置' },
+  { id: 'ruleSets', label: '规则集', description: '直接维护规则集的地址、格式和更新方式' },
   { id: 'presets', label: '本地预设', description: '保存当前配置，之后可以快速加载或删除' },
 ]
 
@@ -128,7 +128,6 @@ const customRuleListFields = [
   ['domainKeyword', '域名关键词'],
   ['domain', '精确域名'],
   ['processName', '进程名'],
-  ['ruleSets', '规则集'],
 ] as const
 
 const customRuleTargetOptions = [
@@ -209,6 +208,23 @@ function activeRuleSets(draft: GeneratorConfig): CustomRuleSets {
     Object.entries({ ...builtInRuleSets, ...(draft.customRuleSets ?? {}) })
       .filter(([name]) => !removed.has(name)),
   )
+}
+
+function removeRuleSetReferences(draft: GeneratorConfig, ruleSetName: string) {
+  const customRules = { ...(draft.customRules ?? {}) }
+  let affectedRuleCount = 0
+
+  for (const [name, rule] of Object.entries({ ...builtInCustomRules, ...customRules })) {
+    if (!rule.ruleSets.includes(ruleSetName)) continue
+
+    customRules[name] = {
+      ...rule,
+      ruleSets: rule.ruleSets.filter((item) => item !== ruleSetName),
+    }
+    affectedRuleCount += 1
+  }
+
+  return { customRules, affectedRuleCount }
 }
 
 function isRuleSetBehavior(value: string): value is RuleSetConfig['behavior'] {
@@ -407,17 +423,24 @@ function App() {
   }
 
   const handleDeleteRuleSet = (name: string) => {
+    const { customRules, affectedRuleCount } = removeRuleSetReferences(workspace.draft, name)
+    const impactMessage = affectedRuleCount > 0 ? `，并从 ${affectedRuleCount} 条规则中移除引用` : ''
+
     if (builtInRuleSetNames.has(name)) {
       const removedBuiltInRuleSets = workspace.draft.removedBuiltInRuleSets ?? []
       if (removedBuiltInRuleSets.includes(name)) return
-      updateDraft({ ...workspace.draft, removedBuiltInRuleSets: [...removedBuiltInRuleSets, name] })
-      setNotice(`已禁用内置规则集 ${name}`)
+      updateDraft({
+        ...workspace.draft,
+        customRules,
+        removedBuiltInRuleSets: [...removedBuiltInRuleSets, name],
+      })
+      setNotice(`已禁用内置规则集 ${name}${impactMessage}`)
       return
     }
     const customRuleSets = { ...(workspace.draft.customRuleSets ?? {}) }
     delete customRuleSets[name]
-    updateDraft({ ...workspace.draft, customRuleSets })
-    setNotice(`已删除规则集 ${name}`)
+    updateDraft({ ...workspace.draft, customRules, customRuleSets })
+    setNotice(`已删除规则集 ${name}${impactMessage}`)
   }
 
   const handleRestoreBuiltInRuleSet = (name: string) => {
@@ -924,12 +947,14 @@ function CustomRulesSection({
 }: CustomRulesSectionProps) {
   const rules = activeRules(draft)
   const ruleSets = activeRuleSets(draft)
+  const customRuleEntries = Object.entries(rules).filter(([name]) => !builtInRuleNames.has(name))
+  const builtInRuleEntries = Object.entries(rules).filter(([name]) => builtInRuleNames.has(name))
   const disabledRules = (draft.removedBuiltInRules ?? []).filter((name) => builtInRuleNames.has(name))
   const disabledRuleSets = (draft.removedBuiltInRuleSets ?? []).filter((name) => builtInRuleSetNames.has(name))
 
   return (
     <section className="settings-section custom-rules" aria-labelledby="custom-rules-heading">
-      <div className="section-heading"><div><h3 id="custom-rules-heading">{mode === 'rules' ? '规则' : '规则集'}</h3><p>变更会立即保存并更新预览。</p><p className="section-explanation">{mode === 'rules' ? '规则 = 匹配条件 + 目标策略。匹配到域名、关键词或进程后，流量会交给目标策略组。' : '规则集 = 可定时更新的外部匹配清单。它不决定目标策略，需要在规则的“规则集”字段中引用才会生效。'}</p></div></div>
+      <div className="section-heading"><div><h3 id="custom-rules-heading">{mode === 'rules' ? '规则' : '规则集'}</h3><p>变更会立即保存并更新预览。</p><p className="section-explanation">{mode === 'rules' ? '按匹配条件、规则集、目标策略的顺序配置规则。规则集由下方列表维护，只能从当前可用项中选择。' : '规则集 = 可定时更新的外部匹配清单。它不决定目标策略，需要在规则中选择才会生效。'}</p></div></div>
       {mode === 'rules' && <section className="rule-management-group" aria-labelledby="rules-heading">
         <div className="rule-management-heading">
           <div><h4 id="rules-heading">规则</h4><p>内置规则可编辑或禁用；新增规则可随时删除。</p></div>
@@ -938,33 +963,99 @@ function CustomRulesSection({
         <label><span>规则名称</span><input value={customRuleName} onChange={(event) => onCustomRuleNameChange(event.target.value)} placeholder="例如 gamingSites" /></label>
         <button className="button secondary" type="button" onClick={onAdd}>添加规则</button>
       </div>
-      <div className="custom-rule-list">
-        {Object.entries(rules).map(([name, rule]) => <CustomRuleEditor key={name} name={name} rule={rule} builtIn={builtInRuleNames.has(name)} onChange={(changes) => onChange(name, changes)} onDelete={() => onDelete(name)} onDisable={() => onDisableBuiltInRule(name)} />)}
-        {disabledRules.length > 0 && (
-          <div className="disabled-source-list" aria-label="已禁用内置规则">
-            {disabledRules.map((name) => <button className="button secondary" type="button" key={name} onClick={() => onRestoreBuiltInRule(name)}>恢复内置规则 {name}</button>)}
+      {customRuleEntries.length > 0 && (
+        <section className="source-collection" aria-labelledby="custom-rule-entries-heading">
+          <h4 id="custom-rule-entries-heading">自定义规则</h4>
+          <div className="custom-rule-list">
+            {customRuleEntries.map(([name, rule]) => <CustomRuleEditor key={name} name={name} rule={rule} ruleSetNames={Object.keys(ruleSets)} builtIn={false} onChange={(changes) => onChange(name, changes)} onDelete={() => onDelete(name)} onDisable={() => onDisableBuiltInRule(name)} />)}
           </div>
-        )}
-      </div>
-      <p className="rule-set-hint">可用规则集：{Object.keys(ruleSets).length > 0 ? Object.keys(ruleSets).join('、') : '暂无'}</p>
-      </section>}
-      {mode === 'ruleSets' && <section className="rule-management-group" aria-labelledby="rule-sets-heading">
-        <div className="rule-management-heading">
-          <div><h4 id="rule-sets-heading">规则集</h4><p>规则集会生成对应的 `rule-providers`，规则可在“规则集”字段中引用它们。</p><p>行为决定规则集按域名或 IP 等方式解析；格式要与远端文件一致；更新周期单位为秒。</p></div>
-        </div>
-        <div className="custom-rule-adder">
-          <label><span>规则集名称</span><input value={customRuleSetName} onChange={(event) => onCustomRuleSetNameChange(event.target.value)} placeholder="例如 gaming" /></label>
-          <button className="button secondary" type="button" onClick={onAddRuleSet}>添加规则集</button>
-        </div>
+        </section>
+      )}
+      <details className="source-collection built-in-source-collection">
+        <summary>内置规则（{builtInRuleEntries.length} 项）</summary>
         <div className="custom-rule-list">
-          {Object.entries(ruleSets).map(([name, ruleSet]) => <RuleSetEditor key={name} name={name} ruleSet={ruleSet} builtIn={builtInRuleSetNames.has(name)} onChange={(changes) => onRuleSetChange(name, changes)} onDelete={() => onDeleteRuleSet(name)} />)}
-          {disabledRuleSets.length > 0 && (
-            <div className="disabled-source-list" aria-label="已禁用内置规则集">
-              {disabledRuleSets.map((name) => <button className="button secondary" type="button" key={name} onClick={() => onRestoreBuiltInRuleSet(name)}>恢复内置规则集 {name}</button>)}
-            </div>
-          )}
+          {builtInRuleEntries.map(([name, rule]) => <CustomRuleEditor key={name} name={name} rule={rule} ruleSetNames={Object.keys(ruleSets)} builtIn onChange={(changes) => onChange(name, changes)} onDelete={() => onDelete(name)} onDisable={() => onDisableBuiltInRule(name)} />)}
         </div>
+      </details>
+      {disabledRules.length > 0 && (
+        <div className="disabled-source-list" aria-label="已禁用内置规则">
+          {disabledRules.map((name) => <button className="button secondary" type="button" key={name} onClick={() => onRestoreBuiltInRule(name)}>恢复内置规则 {name}</button>)}
+        </div>
+      )}
       </section>}
+      <RuleSetManager
+        draftMode={mode}
+        customRuleSetName={customRuleSetName}
+        disabledRuleSets={disabledRuleSets}
+        onCustomRuleSetNameChange={onCustomRuleSetNameChange}
+        onAddRuleSet={onAddRuleSet}
+        onRuleSetChange={onRuleSetChange}
+        onDeleteRuleSet={onDeleteRuleSet}
+        onRestoreBuiltInRuleSet={onRestoreBuiltInRuleSet}
+        ruleSets={ruleSets}
+      />
+    </section>
+  )
+}
+
+interface RuleSetManagerProps {
+  draftMode: 'rules' | 'ruleSets'
+  customRuleSetName: string
+  disabledRuleSets: string[]
+  onCustomRuleSetNameChange: (value: string) => void
+  onAddRuleSet: () => void
+  onRuleSetChange: (name: string, changes: Partial<RuleSetConfig>) => void
+  onDeleteRuleSet: (name: string) => void
+  onRestoreBuiltInRuleSet: (name: string) => void
+  ruleSets: CustomRuleSets
+}
+
+function RuleSetManager({
+  draftMode,
+  customRuleSetName,
+  disabledRuleSets,
+  onCustomRuleSetNameChange,
+  onAddRuleSet,
+  onRuleSetChange,
+  onDeleteRuleSet,
+  onRestoreBuiltInRuleSet,
+  ruleSets,
+}: RuleSetManagerProps) {
+  const customRuleSetEntries = Object.entries(ruleSets).filter(([name]) => !builtInRuleSetNames.has(name))
+  const builtInRuleSetEntries = Object.entries(ruleSets).filter(([name]) => builtInRuleSetNames.has(name))
+
+  return (
+    <section className="rule-management-group" aria-labelledby="rule-sets-heading">
+      <div className="rule-management-heading">
+        <div>
+          <h4 id="rule-sets-heading">{draftMode === 'rules' ? '规则集管理' : '规则集'}</h4>
+          <p>规则集会生成对应的 `rule-providers`，规则可从当前可用规则集中选择。</p>
+          <p>行为决定规则集按域名或 IP 等方式解析；格式要与远端文件一致；更新周期单位为秒。</p>
+        </div>
+      </div>
+      <div className="custom-rule-adder">
+        <label><span>规则集名称</span><input value={customRuleSetName} onChange={(event) => onCustomRuleSetNameChange(event.target.value)} placeholder="例如 gaming" /></label>
+        <button className="button secondary" type="button" onClick={onAddRuleSet}>添加规则集</button>
+      </div>
+      {customRuleSetEntries.length > 0 && (
+        <section className="source-collection" aria-labelledby="custom-rule-sets-heading">
+          <h4 id="custom-rule-sets-heading">自定义规则集</h4>
+          <div className="custom-rule-list">
+            {customRuleSetEntries.map(([name, ruleSet]) => <RuleSetEditor key={name} name={name} ruleSet={ruleSet} builtIn={false} onChange={(changes) => onRuleSetChange(name, changes)} onDelete={() => onDeleteRuleSet(name)} />)}
+          </div>
+        </section>
+      )}
+      <details className="source-collection built-in-source-collection">
+        <summary>内置规则集（{builtInRuleSetEntries.length} 项）</summary>
+        <div className="custom-rule-list">
+          {builtInRuleSetEntries.map(([name, ruleSet]) => <RuleSetEditor key={name} name={name} ruleSet={ruleSet} builtIn onChange={(changes) => onRuleSetChange(name, changes)} onDelete={() => onDeleteRuleSet(name)} />)}
+        </div>
+      </details>
+      {disabledRuleSets.length > 0 && (
+        <div className="disabled-source-list" aria-label="已禁用内置规则集">
+          {disabledRuleSets.map((name) => <button className="button secondary" type="button" key={name} onClick={() => onRestoreBuiltInRuleSet(name)}>恢复内置规则集 {name}</button>)}
+        </div>
+      )}
     </section>
   )
 }
@@ -1038,13 +1129,14 @@ function Toggle({ label, checked, onChange }: ToggleProps) {
 interface CustomRuleEditorProps {
   name: string
   rule: CustomRule
+  ruleSetNames: string[]
   builtIn: boolean
   onChange: (changes: Partial<CustomRule>) => void
   onDelete: () => void
   onDisable: () => void
 }
 
-function CustomRuleEditor({ name, rule, builtIn, onChange, onDelete, onDisable }: CustomRuleEditorProps) {
+function CustomRuleEditor({ name, rule, ruleSetNames, builtIn, onChange, onDelete, onDisable }: CustomRuleEditorProps) {
   const [target, setTarget] = useState(rule.target)
 
   useEffect(() => {
@@ -1054,16 +1146,50 @@ function CustomRuleEditor({ name, rule, builtIn, onChange, onDelete, onDisable }
   return (
     <article className="custom-rule-card">
       <div className="custom-rule-card-header">
-        <div><h3>{name}</h3><span className="source-kind">{builtIn ? '内置规则' : '自定义规则'}</span></div>
+        <div><h3>{name}</h3><span className="source-kind">{builtIn ? '内置规则' : '用户新增规则'}</span></div>
         {builtIn ? (
           <button className="button danger" type="button" onClick={onDisable}>禁用内置规则 {name}</button>
         ) : (
           <button className="button danger" type="button" onClick={onDelete}>删除规则 {name}</button>
         )}
       </div>
-      <details className="rule-editor-details" open={!builtIn || name === 'direct'}>
+      <details className="rule-editor-details" open={!builtIn}>
         <summary>编辑规则 {name}</summary>
         <div className="rule-editor-body">
+          <div className="custom-rule-fields">
+            {customRuleListFields.map(([field, label]) => (
+              <label key={field}>
+                <span>{label} {name}</span>
+                <textarea
+                  value={formatLineList(rule[field])}
+                  onChange={(event) => onChange({ [field]: parseLineList(event.target.value) })}
+                  rows={3}
+                />
+              </label>
+            ))}
+          </div>
+          <fieldset className="rule-set-selector">
+            <legend>规则集 {name}</legend>
+            {ruleSetNames.length > 0 ? (
+              <div className="rule-set-selector-options">
+                {ruleSetNames.map((ruleSetName) => (
+                  <label key={ruleSetName}>
+                    <input
+                      type="checkbox"
+                      aria-label={`规则集 ${ruleSetName} ${name}`}
+                      checked={rule.ruleSets.includes(ruleSetName)}
+                      onChange={(event) => onChange({
+                        ruleSets: event.target.checked
+                          ? [...rule.ruleSets, ruleSetName]
+                          : rule.ruleSets.filter((item) => item !== ruleSetName),
+                      })}
+                    />
+                    <span>{ruleSetName}</span>
+                  </label>
+                ))}
+              </div>
+            ) : <p className="empty-state">暂无可用规则集，请先在下方创建。</p>}
+          </fieldset>
           <label className="custom-rule-target">
             <span>规则目标 {name}</span>
             <input
@@ -1097,18 +1223,6 @@ function CustomRuleEditor({ name, rule, builtIn, onChange, onDelete, onDisable }
               ))}
             </select>
           </label>
-          <div className="custom-rule-fields">
-            {customRuleListFields.map(([field, label]) => (
-              <label key={field}>
-                <span>{label} {name}</span>
-                <textarea
-                  value={formatLineList(rule[field])}
-                  onChange={(event) => onChange({ [field]: parseLineList(event.target.value) })}
-                  rows={3}
-                />
-              </label>
-            ))}
-          </div>
         </div>
       </details>
     </article>
@@ -1140,13 +1254,16 @@ function RuleSetEditor({ name, ruleSet, builtIn, onChange, onDelete }: RuleSetEd
         <div><h3>{name}</h3><span className="source-kind">{builtIn ? '内置规则集' : '自定义规则集'}</span></div>
         <button className="button danger" type="button" onClick={onDelete}>{builtIn ? `禁用内置规则集 ${name}` : `删除规则集 ${name}`}</button>
       </div>
-      <div className="rule-set-fields">
-        <label><span>规则集行为 {name}</span><select value={ruleSet.behavior} onChange={(event) => { if (isRuleSetBehavior(event.target.value)) onChange({ behavior: event.target.value }) }}><option value="classical">classical</option><option value="domain">domain</option><option value="ipcidr">ipcidr</option></select></label>
-        <label><span>规则集格式 {name}</span><select value={ruleSet.format} onChange={(event) => { if (isRuleSetFormat(event.target.value)) onChange({ format: event.target.value }) }}><option value="text">text</option><option value="mrs">mrs</option><option value="yaml">yaml</option></select></label>
-        <label><span>更新周期（秒） {name}</span><input type="number" min="1" value={interval} onChange={(event) => { const value = event.target.value; setInterval(value); const next = Number(value); if (Number.isFinite(next) && next > 0) onChange({ interval: next }) }} /></label>
-        <label><span>规则集地址 {name}</span><input value={url} onChange={(event) => { const value = event.target.value; setUrl(value); if (value.trim()) onChange({ url: value }) }} /></label>
-        <label className="rule-set-path"><span>规则集路径 {name}</span><input value={path} onChange={(event) => { const value = event.target.value; setPath(value); if (value.trim()) onChange({ path: value }) }} /></label>
-      </div>
+      <details className="rule-editor-details" open={!builtIn}>
+        <summary>编辑规则集 {name}</summary>
+        <div className="rule-set-fields">
+          <label><span>规则集行为 {name}</span><select value={ruleSet.behavior} onChange={(event) => { if (isRuleSetBehavior(event.target.value)) onChange({ behavior: event.target.value }) }}><option value="classical">classical</option><option value="domain">domain</option><option value="ipcidr">ipcidr</option></select></label>
+          <label><span>规则集格式 {name}</span><select value={ruleSet.format} onChange={(event) => { if (isRuleSetFormat(event.target.value)) onChange({ format: event.target.value }) }}><option value="text">text</option><option value="mrs">mrs</option><option value="yaml">yaml</option></select></label>
+          <label><span>更新周期（秒） {name}</span><input type="number" min="1" value={interval} onChange={(event) => { const value = event.target.value; setInterval(value); const next = Number(value); if (Number.isFinite(next) && next > 0) onChange({ interval: next }) }} /></label>
+          <label><span>规则集地址 {name}</span><input value={url} onChange={(event) => { const value = event.target.value; setUrl(value); if (value.trim()) onChange({ url: value }) }} /></label>
+          <label className="rule-set-path"><span>规则集路径 {name}</span><input value={path} onChange={(event) => { const value = event.target.value; setPath(value); if (value.trim()) onChange({ path: value }) }} /></label>
+        </div>
+      </details>
     </article>
   )
 }

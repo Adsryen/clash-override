@@ -129,8 +129,10 @@ describe('App', () => {
     expect(screen.queryByRole('button', { name: '脚本内容' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /^规则$/ }))
 
+    await user.click(screen.getByText('编辑规则 direct'))
     expect(screen.getByRole('textbox', { name: '规则目标 direct' })).toHaveValue('DIRECT')
     await user.click(screen.getByRole('button', { name: /^规则集$/ }))
+    await user.click(screen.getByText('编辑规则集 applications'))
     expect(screen.getByRole('textbox', { name: '规则集地址 applications' })).toHaveValue(
       'https://fastly.jsdelivr.net/gh/DustinWin/ruleset_geodata@clash-ruleset/applications.list',
     )
@@ -146,47 +148,70 @@ describe('App', () => {
     expect(screen.getByTestId('script-preview')).toHaveTextContent('"removedBuiltInRules":["downloadApps"]')
 
     await user.click(screen.getByRole('button', { name: '恢复内置规则 downloadApps' }))
+    await user.click(screen.getByText('内置规则（6 项）'))
     expect(screen.getByRole('button', { name: '禁用内置规则 downloadApps' })).toBeVisible()
   })
 
-  it('adds a rule set and exposes it for rule references', async () => {
+  it('selects available rule sets for a rule and clears references when one is removed', async () => {
     const user = userEvent.setup()
     render(<App />)
     openPreview()
 
-    await user.click(screen.getByRole('button', { name: /^规则集$/ }))
+    await user.click(screen.getByRole('button', { name: /^规则$/ }))
     await user.type(screen.getByRole('textbox', { name: '规则集名称' }), 'gaming')
     await user.click(screen.getByRole('button', { name: '添加规则集' }))
     await user.clear(screen.getByRole('textbox', { name: '规则集地址 gaming' }))
     await user.type(screen.getByRole('textbox', { name: '规则集地址 gaming' }), 'https://example.com/gaming.list')
-    expect(screen.getByRole('textbox', { name: '规则集地址 gaming' })).toHaveValue('https://example.com/gaming.list')
-    await user.click(screen.getByRole('button', { name: /^规则$/ }))
     await user.type(screen.getByRole('textbox', { name: '规则名称' }), 'gamingSites')
     await user.click(screen.getByRole('button', { name: '添加规则' }))
-    await user.type(screen.getByRole('textbox', { name: '规则集 gamingSites' }), 'gaming')
 
-    expect(screen.getByText('可用规则集：applications、gaming')).toBeVisible()
+    expect(screen.queryByRole('textbox', { name: '规则集 gamingSites' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: '规则集 gaming gamingSites' }))
+
+    expect(screen.getByRole('checkbox', { name: '规则集 gaming gamingSites' })).toBeChecked()
     expect(screen.getByTestId('script-preview')).toHaveTextContent('https://example.com/gaming.list')
     expect(screen.getByTestId('script-preview')).toHaveTextContent('"ruleSets":["gaming"]')
+
+    await user.click(screen.getByRole('button', { name: '删除规则集 gaming' }))
+    expect(screen.getByRole('status')).toHaveTextContent('已删除规则集 gaming，并从 1 条规则中移除引用')
+    expect(screen.getByTestId('script-preview')).not.toHaveTextContent('"ruleSets":["gaming"]')
   })
 
-  it('separates rule and rule-set workspaces in the desktop navigation', async () => {
+  it('keeps a continuous rule workflow while retaining a direct rule-set view', async () => {
     const user = userEvent.setup()
     render(<App />)
 
-    expect(screen.queryByRole('button', { name: '规则管理' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /^规则$/ }))
     expect(screen.getByRole('heading', { name: '规则', level: 2 })).toBeVisible()
     expect(screen.getByRole('textbox', { name: '规则名称' })).toBeVisible()
-    expect(screen.getAllByRole('option', { name: '直连' }).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('option', { name: '其他节点' }).length).toBeGreaterThan(0)
-    expect(screen.queryByRole('textbox', { name: '规则集名称' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '规则集名称' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: '规则集管理', level: 4 })).toBeVisible()
+    expect(screen.getByText('编辑规则 direct').closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByText('编辑规则集 applications').closest('details')).not.toHaveAttribute('open')
+
+    await user.type(screen.getByRole('textbox', { name: '规则名称' }), 'localSites')
+    await user.click(screen.getByRole('button', { name: '添加规则' }))
+    expect(screen.getByRole('textbox', { name: '规则目标 localSites' })).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: /^规则集$/ }))
     expect(screen.getByRole('heading', { name: '规则集', level: 2 })).toBeVisible()
     expect(screen.getByRole('textbox', { name: '规则集名称' })).toBeVisible()
     expect(screen.getByText('行为决定规则集按域名或 IP 等方式解析；格式要与远端文件一致；更新周期单位为秒。')).toBeVisible()
     expect(screen.queryByRole('textbox', { name: '规则名称' })).not.toBeInTheDocument()
+  })
+
+  it('prioritizes custom entries and keeps built-in sources collapsed', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: /^规则$/ }))
+    expect(screen.getByText('内置规则（6 项）').closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByText('内置规则集（1 项）').closest('details')).not.toHaveAttribute('open')
+
+    await user.type(screen.getByRole('textbox', { name: '规则名称' }), 'localSites')
+    await user.click(screen.getByRole('button', { name: '添加规则' }))
+    expect(screen.getByRole('heading', { name: '自定义规则', level: 4 })).toBeVisible()
+    expect(screen.getByRole('textbox', { name: '规则目标 localSites' })).toBeVisible()
   })
 
   it('explains each workspace and the relationship between rules and rule sets', async () => {
@@ -198,14 +223,14 @@ describe('App', () => {
     expect(navigation.getByText('控制脚本开关、自动测速和 DNS 覆写')).toBeVisible()
     expect(navigation.getByText('按服务开关生成对应的代理策略组')).toBeVisible()
     expect(navigation.getByText('选择地区站点，并决定如何识别订阅节点')).toBeVisible()
-    expect(navigation.getByText('设置域名、关键词、进程等匹配条件，以及命中后的目标策略')).toBeVisible()
-    expect(navigation.getByText('配置外部规则列表的地址和更新方式，再在规则中引用')).toBeVisible()
+    expect(navigation.getByText('按匹配条件、规则集、目标策略完成分流配置')).toBeVisible()
+    expect(navigation.getByText('直接维护规则集的地址、格式和更新方式')).toBeVisible()
     expect(navigation.getByText('保存当前配置，之后可以快速加载或删除')).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: /^规则$/ }))
-    expect(screen.getByText('规则 = 匹配条件 + 目标策略。匹配到域名、关键词或进程后，流量会交给目标策略组。')).toBeVisible()
+    expect(screen.getByText('按匹配条件、规则集、目标策略的顺序配置规则。规则集由下方列表维护，只能从当前可用项中选择。')).toBeVisible()
     await user.click(screen.getByRole('button', { name: /^规则集$/ }))
-    expect(screen.getByText('规则集 = 可定时更新的外部匹配清单。它不决定目标策略，需要在规则的“规则集”字段中引用才会生效。')).toBeVisible()
+    expect(screen.getByText('规则集 = 可定时更新的外部匹配清单。它不决定目标策略，需要在规则中选择才会生效。')).toBeVisible()
   })
 
   it('groups region controls with region preferences and shows section counts in navigation', async () => {

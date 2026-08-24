@@ -408,8 +408,7 @@ legend {
   font-size: 14px;
 }
 
-.rule-management-heading p,
-.rule-set-hint {
+.rule-management-heading p {
   margin: 5px 0 0;
   color: #63746e;
   font-size: 12px;
@@ -420,6 +419,31 @@ legend {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.source-collection {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.source-collection > h4 {
+  margin: 0;
+  color: #24413b;
+  font-size: 13px;
+}
+
+.built-in-source-collection {
+  border-top: 1px solid #e2e9e5;
+  padding-top: 10px;
+}
+
+.built-in-source-collection > summary {
+  width: fit-content;
+  color: #63746e;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .source-kind {
@@ -510,6 +534,43 @@ legend {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin-top: 10px;
+}
+
+.rule-set-selector {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 10px;
+  border: 1px solid #d2dcd5;
+  padding: 10px;
+}
+
+.rule-set-selector legend {
+  margin: 0;
+  padding: 0 4px;
+  color: #24413b;
+  font-size: 12px;
+}
+
+.rule-set-selector-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.rule-set-selector-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #30433e;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.rule-set-selector-options input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #0f5d50;
 }
 
 .empty-state {
